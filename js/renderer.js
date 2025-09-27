@@ -1,5 +1,5 @@
 import { decks, firebaseConfig } from './config.js';
-import { elements, showScreen, updateDeckDetails } from './ui.js';
+import { elements, showScreen, updateDeckDetails, clearMapHighlights } from './ui.js';
 import * as singleplayer from './singleplayer.js';
 import * as multiplayer from './multiplayer.js';
 

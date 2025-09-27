@@ -156,7 +156,7 @@ export function updatePartyStats(players, myPlayerId, reviveCallback) {
 
         // --- NEW: Revive Button Logic ---
         if (pData.hp <= 0) {
-            const reviveCost = 100 + ((pData.deaths || 0) * 100);
+            const reviveCost = 50 + ((pData.deaths || 0) * 50);
             const reviveBtn = document.createElement('button');
             reviveBtn.className = 'revive-btn';
             reviveBtn.textContent = `Revive (${reviveCost} Gold)`;
@@ -291,31 +291,45 @@ export function showGameScreen(mode, resultData, isHost) {
         elements.mapContainer.classList.remove('hidden');
         elements.partyStatsContainer.style.display = 'flex';
     }
-    if (mode === 'battle') elements.battleContainer.classList.remove('hidden');
+    if (mode === 'battle') {
+        elements.battleContainer.classList.remove('hidden');
+    }
     if (mode === 'end_battle') {
         const titleEl = document.getElementById('battle-result-title');
         const textEl = document.getElementById('battle-result-text');
         const goldRewardEl = document.getElementById('gold-reward-text');
         
-        if (resultData.result === 'victory') {
-            titleEl.textContent = 'Victory!';
-            textEl.textContent = 'The monster has been vanquished.';
-            // --- NEW: Display gold reward ---
-            goldRewardEl.textContent = `Each party member receives ${resultData.goldReward} Gold!`;
-            goldRewardEl.style.display = 'block';
-            // --------------------------------
-            elements.returnToMapBtn.style.display = isHost ? 'block' : 'none';
-            elements.defeatContinueBtn.style.display = 'none';
-        } else { // defeat
-            titleEl.textContent = 'Defeat!';
-            textEl.textContent = 'Your party has fallen. The expedition is over.';
-            goldRewardEl.style.display = 'none'; // Hide gold text on defeat
-            elements.returnToMapBtn.style.display = 'none';
-            elements.defeatContinueBtn.style.display = isHost ? 'block' : 'none';
+        // Hide all buttons by default
+        elements.returnToMapBtn.style.display = 'none';
+        elements.defeatContinueBtn.style.display = 'none';
+        goldRewardEl.style.display = 'none';
+
+        switch (resultData.result) {
+            case 'victory':
+                titleEl.textContent = 'Victory!';
+                textEl.textContent = 'The monster has been vanquished.';
+                goldRewardEl.textContent = `Each party member receives ${resultData.goldReward} Gold!`;
+                goldRewardEl.style.display = 'block';
+                if (isHost) elements.returnToMapBtn.style.display = 'block';
+                break;
+            case 'defeat':
+                titleEl.textContent = 'Defeat!';
+                textEl.textContent = 'Your party has fallen. The expedition is over.';
+                if (isHost) elements.defeatContinueBtn.style.display = 'block';
+                break;
+            case 'event': // Generic case for Rest, Shop, etc.
+                titleEl.textContent = resultData.title;
+                textEl.textContent = resultData.message;
+                // Only the host sees the button to prevent multiple state changes
+                if (isHost) elements.returnToMapBtn.style.display = 'block';
+                break;
         }
         elements.endOfBattleScreen.classList.remove('hidden');
     }
 }
+
+
+// --- replace the existing renderMap(...) and determineVotableNodes(...) with this code ---
 
 export function renderMap(mapData, gameState, onNodeClick) {
     const mapContainer = document.getElementById('map-container');
@@ -376,54 +390,63 @@ export function renderMap(mapData, gameState, onNodeClick) {
         nodeEl.style.left = `${screenPos.x}px`;
         nodeEl.style.top = `${screenPos.y}px`;
 
-        if (gameState.clearedNodes?.includes(node.id)) nodeEl.classList.add('cleared');
-        if (gameState.currentNodeId === node.id) nodeEl.classList.add('current');
+        // Normalize comparisons to strings to avoid number/string mismatches from Firebase
+        const nodeIdStr = String(node.id);
+        if (gameState.clearedNodes?.some(c => String(c) === nodeIdStr)) nodeEl.classList.add('cleared');
+        if (String(gameState.currentNodeId) === nodeIdStr) nodeEl.classList.add('current');
         
         mapNodes.appendChild(nodeEl);
-        nodeElements[node.id] = nodeEl;
+        nodeElements[nodeIdStr] = nodeEl; // store by string key
     });
 
-    // Votable logic
+    // Mark the most-recently cleared node with a special class so players can see the node they just beat.
+    const lastClearedNodeId = gameState.clearedNodes?.[gameState.clearedNodes.length - 1];
+    if (lastClearedNodeId !== undefined) {
+        const el = nodeElements[String(lastClearedNodeId)];
+        if (el) el.classList.add('just-cleared');
+    }
+
+    // Votable logic (determineVotableNodes now returns string ids)
     const votableNodeIds = determineVotableNodes(mapData, gameState);
     votableNodeIds.forEach(nodeId => {
-        const nodeEl = nodeElements[nodeId];
+        const nodeEl = nodeElements[String(nodeId)];
         if (nodeEl) {
             nodeEl.classList.add('votable');
             nodeEl.onclick = (event) => {
                 event.stopPropagation(); // Prevent click from triggering a pan
-                onNodeClick(nodeId);
+                // convert to Number for callers that expect numeric ids (singleplayer)
+                const numericId = Number(nodeId);
+                onNodeClick(typeof onNodeClick === 'function' ? numericId : nodeId);
             };
         }
     });
     
-    elements.votingStatus.textContent = votableNodeIds.length > 0 ? "Choose your next destination." : gameState.clearedNodes?.includes(1) ? "Congratulations! You defeated the boss!" : "Battle in progress...";
+    elements.votingStatus.textContent = votableNodeIds.length > 0 ? "Choose your next destination." : gameState.clearedNodes?.some(c => String(c) === '1') ? "Congratulations! You defeated the boss!" : "Battle in progress...";
 
     // Auto-center the view on the last cleared node
-    const lastClearedNodeId = gameState.clearedNodes?.[gameState.clearedNodes.length - 1] ?? 0;
-    const focusNode = mapData.nodes[lastClearedNodeId];
+    const focusNodeId = lastClearedNodeId ?? 0;
+    const focusNode = mapData.nodes[focusNodeId];
     if (focusNode) {
         const focusPos = transformPoint(focusNode.pos);
         mapInteractionHandler.centerOn(focusPos.x, focusPos.y);
     }
 }
 
-// REPLACE the existing determineVotableNodes function with this one.
 function determineVotableNodes(mapData, gameState) {
     if (gameState.status !== 'map_vote') return [];
-    
-    // If the game just started, the 'Start' node (ID 0) is the last cleared node.
-    let lastClearedNodeId = 0;
-    if (gameState.clearedNodes && gameState.clearedNodes.length > 0) {
-        // Otherwise, it's the most recent node in the clearedNodes array.
-        lastClearedNodeId = gameState.clearedNodes[gameState.clearedNodes.length - 1];
-    }
 
-    // Find all nodes that are connected FROM the last cleared node.
-    return mapData.connections
-        .filter(conn => conn.from === lastClearedNodeId)
-        .map(conn => conn.to)
-        // Ensure we don't suggest a node that has already been cleared.
-        .filter(nodeId => !gameState.clearedNodes?.includes(nodeId));
+    // The clearedNodes array is now guaranteed to exist and start with [0].
+    // Find the ID of the most recently cleared node (normalize to string).
+    const lastClearedNodeId = String(gameState.clearedNodes[gameState.clearedNodes.length - 1]);
+
+    // Find all connections that originate from the last cleared node.
+    const connections = mapData.connections
+        .filter(conn => String(conn.from) === lastClearedNodeId)
+        .map(conn => String(conn.to));
+
+    // Filter out any nodes that might have been part of an alternate path already cleared.
+    const uniqueConnections = [...new Set(connections)];
+    return uniqueConnections.filter(nodeId => !gameState.clearedNodes.some(c => String(c) === nodeId));
 }
 
 export function setTimerVisibility(visible) {
@@ -450,3 +473,22 @@ export function updatePlayerList(players) {
         elements.playerList.innerHTML += `<p>${player.name} (Deck: ${deckName})</p>`;
     }
 }
+
+export function clearMapHighlights() {
+    const mapNodes = document.getElementById('map-nodes');
+    if (!mapNodes) return;
+
+    // Remove highlight classes from any leftover nodes
+    mapNodes.querySelectorAll('.node').forEach(n => {
+        n.classList.remove('current', 'votable', 'just-cleared', 'cleared');
+        // remove inline onclick handlers to avoid stale callbacks
+        n.onclick = null;
+    });
+
+    // Remove connection lines
+    mapNodes.querySelectorAll('.node-line').forEach(l => l.remove());
+
+    // Clear the DOM so renderMap starts with a fresh container
+    mapNodes.innerHTML = '';
+}
+

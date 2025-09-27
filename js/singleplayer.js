@@ -237,6 +237,9 @@ function endBattle(result) {
     }
     // Pass the result and reward info to the UI
     ui.showGameScreen('end_battle', { result, goldReward }, true);
+
+    // Ensure the return button actually returns to the map
+    ui.elements.returnToMapBtn.onclick = returnToMap;
 }
 
 function revivePlayer(playerId) {
@@ -258,34 +261,36 @@ function revivePlayer(playerId) {
 }
 
 
+// MODIFIED: This now shows the result on the event screen
 function handleRestSite() {
-    // --- THIS IS THE FIX: Use state.player, not state.battle.players ---
     const myData = state.player;
     const oldHp = myData.hp;
 
     const result = engine.handleRest(myData);
-    state.player = result.updatedPlayer; // Save the updated player state
+    state.player = result.updatedPlayer;
 
     const healedAmount = state.player.hp - oldHp;
     const healPercent = Math.round((healedAmount / myData.maxHp) * 100);
+    const message = `You rest at the campfire, recovering ${healedAmount} HP (${healPercent}%).\nYour HP is now ${state.player.hp} / ${state.player.maxHp}.`;
 
-    alert(
-        `You rest at the campfire.\n` +
-        `Healed for ${healedAmount} HP (${healPercent}%).\n` +
-        `Your HP is now ${state.player.hp} / ${state.player.maxHp}.`
-    );
-
-    returnToMap();
+    // Show the result on the end_battle screen, which now handles generic events
+    ui.showGameScreen('end_battle', { result: 'event', title: 'Rest Site', message: message }, true);
+    ui.elements.returnToMapBtn.onclick = returnToMap;
 }
-
 
 function handlePlaceholderNode(nodeType) {
-    alert(`You have arrived at an ${nodeType}. This feature will be implemented soon!`);
-    returnToMap();
+    const message = `You have arrived at an ${nodeType}. This feature will be implemented soon!`;
+    ui.showGameScreen('end_battle', { result: 'event', title: nodeType, message: message }, true);
+    ui.elements.returnToMapBtn.onclick = returnToMap;
 }
 
+// MODIFIED: This is now the single point of return to the map.
 function returnToMap() {
-    state.gameState.clearedNodes.push(state.gameState.currentNodeId);
+    // Only add the node to clearedNodes if it wasn't a battle.
+    // The endBattle function handles clearing battle nodes.
+    if (!state.battle) {
+        state.gameState.clearedNodes.push(state.gameState.currentNodeId);
+    }
     state.battle = null;
     state.gameState.status = 'map_vote';
     ui.showGameScreen('map');

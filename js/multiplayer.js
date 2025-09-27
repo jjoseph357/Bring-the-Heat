@@ -15,19 +15,14 @@ export function init(firebaseConfig, playerName, deckId) {
     db = getDatabase(app);
     myName = playerName;
     myDeckId = deckId;
-
-    // --- THIS IS THE FIX FOR THE VOTING BUG ---
-    // Initialize gameState correctly when the host starts the game.
     ui.elements.startGameBtn.onclick = () => {
         if (isHost) {
             update(ref(db, `lobbies/${currentLobby}/gameState`), {
                 status: 'map_vote',
-                clearedNodes: [0] // Pre-clear the 'Start' node (ID 0)
+                clearedNodes: [0] // Correctly initialize the game
             });
         }
     };
-    // ------------------------------------------
-
     ui.elements.createLobbyBtn.onclick = createLobby;
     ui.elements.joinLobbyBtn.onclick = joinLobby;
     ui.elements.chargeBtn.onclick = chargeAttack;
@@ -108,27 +103,45 @@ function listenToLobbyChanges() {
                 ui.renderMap(lobbyData.map, gameState, castVote);
                 ui.updatePartyStats(players, currentPlayerId, revivePlayerMultiplayer);
                 if (isHost && lobbyData.votes) {
-                    if (Object.keys(lobbyData.votes).length === Object.keys(players).length) {
+                    const livingPlayerCount = Object.values(players).filter(p => p.hp > 0).length;
+                    if (livingPlayerCount > 0 && Object.keys(lobbyData.votes).length === livingPlayerCount) {
                         const nextNodeId = performTally(lobbyData.votes);
                         const nodeType = lobbyData.map.nodes[nextNodeId].type;
+
+                        // Build a single updates object and apply it once.
+                        let updates = {};
+
                         switch (nodeType) {
-                            case 'Normal Battle': case 'Elite Battle': case 'Boss':
-                                const newBattleState = createBattleState(nodeType, lobbyData);
-                                const updates = {
-                                    [`/battle`]: newBattleState,
-                                    [`/gameState/status`]: 'battle',
-                                    [`/gameState/currentNodeId`]: nextNodeId,
-                                    [`/votes`]: null
-                                };
-                                update(lobbyRef, updates);
+                            case 'Normal Battle':
+                            case 'Elite Battle':
+                            case 'Boss':
+                                updates[`/battle`] = createBattleState(nodeType, lobbyData);
+                                updates[`/gameState/status`] = 'battle';
                                 break;
+
                             case 'Rest Site':
-                                handleRestSiteMultiplayer(nextNodeId);
+                                // prepareRestSiteUpdates returns an updates object (does NOT call `update` itself)
+                                updates = { ...updates, ...prepareRestSiteUpdates(lobbyData, nextNodeId) };
                                 break;
-                            case 'Shop': case 'Unknown Event':
-                                handlePlaceholderNodeMultiplayer(nextNodeId, nodeType);
+
+                            case 'Shop':
+                            case 'Unknown Event':
+                                // preparePlaceholderNodeUpdates returns an updates object (does NOT call `update` itself)
+                                updates = { ...updates, ...preparePlaceholderNodeUpdates(lobbyData, nextNodeId, nodeType) };
                                 break;
                         }
+
+                        // Common updates for all node resolutions
+                        updates[`/gameState/currentNodeId`] = nextNodeId;
+                        updates[`/votes`] = null;
+
+                        // Mark cleared nodes for non-battle nodes
+                        if (nodeType !== 'Normal Battle' && nodeType !== 'Elite Battle' && nodeType !== 'Boss') {
+                            updates[`/gameState/clearedNodes`] = [...(gameState.clearedNodes || [0]), nextNodeId];
+                        }
+
+                        // Apply single atomic update
+                        update(lobbyRef, updates);
                     }
                 }
             }
@@ -173,6 +186,7 @@ function listenToLobbyChanges() {
     });
 }
 
+
 function updatePlayerList(players) {
     ui.elements.playerList.innerHTML = '';
     for (const pId in players) {
@@ -212,15 +226,32 @@ function createBattleState(nodeType, currentLobbyData) {
         monsterKey = normalKeys[Math.floor(Math.random() * normalKeys.length)];
     }
     const baseMonster = monsters[monsterTier][monsterKey];
-    const livingPlayers = Object.values(currentLobbyData.players).filter(p => p.hp > 0).length;
+
+    // --- THIS IS THE CORRECTED LOGIC ---
+    // We now count the total number of players in the lobby, regardless of their HP.
+    const totalPlayers = Object.keys(currentLobbyData.players).length;
+    // ------------------------------------
+
     const battleState = {
         phase: 'PLAYER_TURN', phaseEndTime: Date.now() + 25000,
-        monster: { tier: monsterTier, type: monsterKey, name: baseMonster.name, hp: baseMonster.hp * livingPlayers, },
-        monsters: [{ tier: monsterTier, type: monsterKey, name: baseMonster.name, hp: baseMonster.hp * livingPlayers, id: `m_${Date.now()}` }],
+        monster: { 
+            tier: monsterTier, 
+            type: monsterKey, 
+            name: baseMonster.name,
+            hp: baseMonster.hp * totalPlayers, // Scale HP by the total party size
+        },
+        monsters: [{ 
+            tier: monsterTier, 
+            type: monsterKey, 
+            name: baseMonster.name, 
+            hp: baseMonster.hp * totalPlayers, 
+            id: `m_${Date.now()}` 
+        }],
         log: {}, players: {}, turn: 1,
     };
     for (const pId in currentLobbyData.players) {
         const player = currentLobbyData.players[pId];
+        // We still only add living players to the battle itself.
         if (player.hp > 0) {
             const deckConfig = decks[player.deck];
             battleState.players[pId] = {
@@ -240,44 +271,48 @@ function logBattleMessage(message) {
     set(newLogEntryRef, { message, timestamp: Date.now() });
 }
 
-// --- THIS IS THE FIX FOR THE HP RESET BUG ---
 function handleVictory(battleData) {
     if (!isHost) return;
+
+    // 1. Calculate Gold Reward ONCE.
     const monster = battleData.monsters[0];
     const monsterStats = monsters[monster.tier][monster.type];
     const goldDropRange = monsterStats.goldDrop;
     const goldReward = Math.floor(Math.random() * (goldDropRange[1] - goldDropRange[0] + 1)) + goldDropRange[0];
     
+    // 2. Prepare Atomic Update
     const updates = {};
     updates[`/gameState/status`] = 'victory';
-    updates[`/gameState/goldReward`] = goldReward;
+    updates[`/gameState/goldReward`] = goldReward; // Store the single, authoritative reward.
 
-    // Explicitly sync final HP from battle back to the persistent player object
+    // 3. Update the clearedNodes array *at the moment of victory*.
+    const currentNodeId = lobbyData.gameState.currentNodeId;
+    // Ensure clearedNodes exists, defaulting to [0] if it doesn't.
+    const clearedNodes = [...(lobbyData.gameState.clearedNodes || [0]), currentNodeId];
+    updates[`/gameState/clearedNodes`] = clearedNodes;
+
+    // 4. Explicitly sync final HP from battle and distribute gold to survivors.
     for (const pId in lobbyData.players) {
         const finalBattleData = battleData.players[pId];
-        if (finalBattleData) {
-            // Player was in the battle, save their final HP
+        if (finalBattleData) { // Player was in the battle
             updates[`/players/${pId}/hp`] = finalBattleData.hp;
             if (finalBattleData.hp > 0) {
-                // If they survived, also give them gold
                 updates[`/players/${pId}/gold`] = (lobbyData.players[pId].gold || 0) + goldReward;
             }
         }
-        // If a player wasn't in the battle (already dead), their HP is untouched and remains 0.
     }
     
+    // 5. Execute the single, atomic update.
     update(lobbyRef, updates);
 }
-// ------------------------------------------
+
 
 function revivePlayerMultiplayer(playerId) {
     if (playerId !== currentPlayerId) return;
     const playerRef = ref(db, `lobbies/${currentLobby}/players/${playerId}`);
     runTransaction(playerRef, (pData) => {
         if (pData && pData.hp <= 0) {
-            // --- THIS IS THE MODIFIED LINE ---
             const reviveCost = 50 + ((pData.deaths || 0) * 50);
-            // ---------------------------------
             if (pData.gold >= reviveCost) {
                 pData.gold -= reviveCost;
                 pData.hp = pData.maxHp || 100;
@@ -287,35 +322,43 @@ function revivePlayerMultiplayer(playerId) {
         return pData;
     });
 }
-
-
-function handleRestSiteMultiplayer(nodeId) {
-    if (!isHost) return;
+function prepareRestSiteUpdates(lobbySnapshotData, nodeId) {
     const updates = {};
-    updates[`/gameState/status`] = 'map_vote';
-    updates[`/gameState/clearedNodes`] = [...(lobbyData.gameState.clearedNodes || []), nodeId];
-    updates['/votes'] = null;
-    for (const pId in lobbyData.players) {
-        const pData = lobbyData.players[pId];
+    const logRef = ref(db, `lobbies/${currentLobby}/battle/log`);
+
+    for (const pId in lobbySnapshotData.players) {
+        const pData = lobbySnapshotData.players[pId];
         if (pData.hp > 0) {
             const result = engine.handleRest(pData);
             updates[`/players/${pId}/hp`] = result.updatedPlayer.hp;
-            logBattleMessage(result.logMessage);
+
+            const newLogRef = push(logRef);
+            updates[`/battle/log/${newLogRef.key}`] = { message: result.logMessage, timestamp: Date.now() };
         }
     }
-    update(lobbyRef, updates);
+
+    // map-level updates for rest nodes (host will return to map after applying)
+    updates[`/gameState/status`] = 'map_vote';
+    updates[`/votes`] = null;
+    updates[`/gameState/clearedNodes`] = [...(lobbySnapshotData.gameState?.clearedNodes || [0]), nodeId];
+
+    return updates;
 }
 
-function handlePlaceholderNodeMultiplayer(nodeId, nodeType) {
-    if (!isHost) return;
-    logBattleMessage(`The party arrived at an ${nodeType}.`);
-    const updates = {
-        '/gameState/status': 'map_vote',
-        '/gameState/clearedNodes': [...(lobbyData.gameState.clearedNodes || []), nodeId],
-        '/votes': null
-    };
-    update(lobbyRef, updates);
+function preparePlaceholderNodeUpdates(lobbySnapshotData, nodeId, nodeType) {
+    const updates = {};
+    const logRef = ref(db, `lobbies/${currentLobby}/battle/log`);
+    const newLogRef = push(logRef);
+
+    updates[`/battle/log/${newLogRef.key}`] = { message: `The party arrived at an ${nodeType}.`, timestamp: Date.now() };
+
+    updates[`/gameState/status`] = 'map_vote';
+    updates[`/votes`] = null;
+    updates[`/gameState/clearedNodes`] = [...(lobbySnapshotData.gameState?.clearedNodes || [0]), nodeId];
+
+    return updates;
 }
+
 
 function forceEndTurn(battleData) {
     if (!isHost) return;
@@ -434,15 +477,13 @@ function startEnemyTurn() {
     });
 }
 
+
 function returnToMap() {
     if (!isHost) return;
-    const gameStateRef = child(lobbyRef, 'gameState');
-    runTransaction(gameStateRef, (gs) => {
-        if (gs) {
-            gs.status = 'map_vote';
-            gs.clearedNodes = [...(gs.clearedNodes || []), gs.currentNodeId];
-            gs.goldReward = null;
-        }
-        return gs;
-    }).then(() => { remove(battleRef); });
+    const updates = {
+        '/gameState/status': 'map_vote',
+        '/gameState/goldReward': null, // Clean up gold reward from the victory screen
+        '/battle': null // Delete the temporary battle object
+    };
+    update(lobbyRef, updates);
 }
