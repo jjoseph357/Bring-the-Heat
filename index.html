@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Card Combat</title>
+    <title>Inferno's Gambit</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- Main Menu -->
     <div id="main-menu" class="screen active">
-        <h1>Card Combat</h1>
+        <h1>Inferno's Gambit</h1>
         <input type="text" id="player-name-input" placeholder="Enter Your Name" maxlength="12">
         <div id="deck-selection-container">
             <h3>Choose Your Deck:</h3>
@@ -34,17 +34,27 @@
         <hr>
         <h3>Players in Lobby:</h3>
         <div id="player-list"></div>
+        <div id="lobby-deck-selection-container">
+            <h3>Change Your Deck:</h3>
+            <select id="lobby-deck-select">
+                <option value="deck1">Standard Issue</option>
+                <option value="deck2">Pyramid Scheme</option>
+                <option value="deck3">High Stakes</option>
+                <option value="deck4">Low Roller</option>
+            </select>
+            <div id="lobby-deck-details"></div>
+        </div>
         <button id="start-game-btn" style="display: none;">Start Game</button>
         <button id="back-to-main-menu-btn">Back to Main Menu</button>
     </div>
 
     <!-- Main Game Screen -->
     <div id="game-screen" class="screen">
-        <!-- Map View -->
+        <!-- THIS STRUCTURE IS REVISED -->
+        <h2>The Expedition Map</h2>
+        <p id="voting-status"></p>        <!-- Map View -->
         <div id="map-container">
-            <h2>The Expedition Map</h2>
             <div id="map-nodes"></div>
-            <p id="voting-status"></p>
         </div>
         
         <!-- Battle View -->
@@ -94,6 +104,7 @@
 
     <!-- Main script entry point -->
     <script src="js/renderer.js" type="module"></script>
+    <script src="https://unpkg.com/delaunator@5.0.0/delaunator.min.js"></script>
 
 </body>
 </html>

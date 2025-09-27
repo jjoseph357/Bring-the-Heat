@@ -22,6 +22,8 @@ export const elements = {
     deckSelect: document.getElementById('deck-select'),
     deckDetails: document.getElementById('deck-details'),
     playerList: document.getElementById('player-list'),
+    lobbyDeckSelect: document.getElementById('lobby-deck-select'),
+    lobbyDeckDetails: document.getElementById('lobby-deck-details'),
 
     // Map
     mapNodes: document.getElementById('map-nodes'),
@@ -182,22 +184,62 @@ export function renderMap(mapData, gameState, onNodeClick) {
     elements.mapNodes.innerHTML = '';
     const nodeElements = {};
 
-    Object.values(mapData.nodes).forEach(node => {
+    // --- NEW: Normalization and Scaling Logic ---
+    const allNodes = Object.values(mapData.nodes);
+    if (allNodes.length === 0) return;
+
+    // These are the logical dimensions from game-logic.js
+    const logicalWidth = 25;
+    const logicalHeight = 40;
+
+    const mapWidth = elements.mapNodes.clientWidth;
+    const mapHeight = elements.mapNodes.clientHeight;
+    const padding = 80;
+
+    // --- THIS IS THE CRITICAL FIX ---
+    // We now scale based on the full logical plane, not the bounding box of the points.
+    // This forces the nodes to fill the entire container width.
+    const scaleX = (mapWidth - padding * 2) / logicalWidth;
+    const scaleY = (mapHeight - padding * 2) / logicalHeight;
+    // ---------------------------------------------
+
+    const transformPoint = (pos) => {
+        // We flip the Y-axis calculation to make the map render from bottom to top
+        const x = (pos.x * scaleX) + padding;
+        const y = (mapHeight - (pos.y * scaleY)) - padding;
+        return { x, y };
+    };
+
+    // Draw lines for connections first
+    mapData.connections.forEach(conn => {
+        const fromNode = mapData.nodes[conn.from];
+        const toNode = mapData.nodes[conn.to];
+        if (fromNode && toNode) {
+            const p1 = transformPoint(fromNode.pos);
+            const p2 = transformPoint(toNode.pos);
+            const line = document.createElement('div');
+            line.className = 'node-line';
+            const length = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+            line.style.width = `${length}px`;
+            line.style.transform = `rotate(${angle}deg)`;
+            line.style.left = `${p1.x}px`;
+            line.style.top = `${p1.y}px`;
+            elements.mapNodes.appendChild(line);
+        }
+    });
+
+    // Draw nodes on top of lines
+    allNodes.forEach(node => {
+        const screenPos = transformPoint(node.pos);
         const nodeEl = document.createElement('div');
         nodeEl.className = 'node';
-        nodeEl.id = node.id;
-        nodeEl.textContent = node.id.includes('boss') ? 'BOSS' : `Area ${node.level + 1}`;
-        
-        const levelNodes = Object.values(mapData.nodes).filter(n => n.level === node.level);
-        const nodeIndex = levelNodes.findIndex(n => n.id === node.id);
-        const x = (nodeIndex + 1) * (100 / (levelNodes.length + 1));
-        const y = (node.level + 1) * (100 / (Math.max(...Object.values(mapData.nodes).map(n => n.level)) + 2));
-        nodeEl.style.left = `${x}%`;
-        nodeEl.style.top = `${y}%`;
-
+        nodeEl.id = `map-node-${node.id}`;
+        nodeEl.textContent = node.type;
+        nodeEl.style.left = `${screenPos.x}px`;
+        nodeEl.style.top = `${screenPos.y}px`;
         if (gameState.clearedNodes?.includes(node.id)) nodeEl.classList.add('cleared');
         if (gameState.currentNodeId === node.id) nodeEl.classList.add('current');
-        
         elements.mapNodes.appendChild(nodeEl);
         nodeElements[node.id] = nodeEl;
     });
@@ -205,21 +247,37 @@ export function renderMap(mapData, gameState, onNodeClick) {
     const votableNodeIds = determineVotableNodes(mapData, gameState);
     votableNodeIds.forEach(nodeId => {
         const nodeEl = nodeElements[nodeId];
-        nodeEl.classList.add('votable');
-        nodeEl.onclick = () => onNodeClick(nodeId);
+        if (nodeEl) {
+            nodeEl.classList.add('votable');
+            nodeEl.onclick = () => onNodeClick(nodeId);
+        }
     });
+    
+    elements.votingStatus.textContent = votableNodeIds.length > 0 ? "Choose your next destination." : gameState.clearedNodes?.includes(1) ? "Congratulations! You defeated the boss!" : "Battle in progress...";
 
-    elements.votingStatus.textContent = votableNodeIds.length > 0 ? "Choose your next destination." : gameState.clearedNodes?.includes('node-boss') ? "Congratulations! You defeated the boss!" : "Battle in progress...";
+    // --- NEW: Auto-scroll to the bottom on initial render ---
+    const mapContainer = document.getElementById('map-container');
+    if (mapContainer) {
+        mapContainer.scrollTop = mapContainer.scrollHeight;
+    }
 }
 
+// REPLACE the existing determineVotableNodes function with this one.
 function determineVotableNodes(mapData, gameState) {
     if (gameState.status !== 'map_vote') return [];
-    if (!gameState.currentNodeId && !(gameState.clearedNodes?.length > 0)) {
-        return Object.keys(mapData.nodes).filter(id => mapData.nodes[id].level === 0);
+    
+    // If the game just started, the 'Start' node (ID 0) is the last cleared node.
+    let lastClearedNodeId = 0;
+    if (gameState.clearedNodes && gameState.clearedNodes.length > 0) {
+        // Otherwise, it's the most recent node in the clearedNodes array.
+        lastClearedNodeId = gameState.clearedNodes[gameState.clearedNodes.length - 1];
     }
+
+    // Find all nodes that are connected FROM the last cleared node.
     return mapData.connections
-        .filter(conn => conn.from === gameState.currentNodeId)
+        .filter(conn => conn.from === lastClearedNodeId)
         .map(conn => conn.to)
+        // Ensure we don't suggest a node that has already been cleared.
         .filter(nodeId => !gameState.clearedNodes?.includes(nodeId));
 }
 
@@ -235,4 +293,15 @@ export function updateTimer(endTime) {
         elements.turnTimer.textContent = timeLeft;
         if (timeLeft <= 0) clearInterval(battleTimerInterval);
     }, 500);
+}
+
+export function updatePlayerList(players) {
+    elements.playerList.innerHTML = '';
+    for (const pId in players) {
+        const player = players[pId];
+        // Look up the full deck name from the config
+        const deckName = decks[player.deck]?.name || 'Unknown Deck';
+        // Display the player's name and their chosen deck
+        elements.playerList.innerHTML += `<p>${player.name} (Deck: ${deckName})</p>`;
+    }
 }

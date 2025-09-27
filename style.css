@@ -5,9 +5,30 @@ body {
     color: #ffffff;
     margin: 0;
     padding: 20px;
+    height: 100vh;
+    box-sizing: border-box;
 }
-.screen { display: none; max-width: 1000px; margin: auto; }
+
+/* Default screen size for menus */
+.screen { 
+    display: none; 
+    max-width: 1000px; 
+    margin: auto; 
+}
 .screen.active { display: block; }
+
+/* --- THIS IS THE CRITICAL LAYOUT FIX --- */
+/* Make the game screen itself much wider and use flexbox */
+#game-screen.active {
+    display: flex;
+    flex-direction: column;
+    height: 95vh;
+    /* Use a responsive width like 90% of the viewport, with a max of 1600px */
+    max-width: 90vw; 
+    width: 1600px;
+}
+/* ------------------------------------ */
+
 .hidden { display: none !important; }
 
 button { background-color: #7289da; color: white; border: none; padding: 10px 20px; margin: 5px; border-radius: 5px; cursor: pointer; font-size: 16px; transition: background-color 0.2s; }
@@ -17,25 +38,60 @@ button:disabled { background-color: #555; cursor: not-allowed; }
 input, select { padding: 10px; margin: 5px; border-radius: 5px; border: 1px solid #444; background-color: #40444b; color: #fff; font-size: 16px; }
 hr { border-color: #444; }
 
-#main-menu #deck-selection-container { margin: 20px 0; }
+#main-menu #deck-selection-container, #multiplayer-lobby #lobby-deck-selection-container { margin: 20px 0; }
 #player-list p { margin: 5px 0; }
-#deck-details { padding: 15px; margin-top: 10px; background-color: #23272a; border-radius: 5px; text-align: left; }
+#deck-details, #lobby-deck-details { padding: 15px; margin-top: 10px; background-color: #23272a; border-radius: 5px; text-align: left; }
 
-/* Map Styling */
-#map-nodes { position: relative; height: 500px; width: 100%; margin-top: 20px; }
-.node { width: 80px; height: 80px; border: 3px solid #7289da; background-color: #40444b; border-radius: 50%; position: absolute; display: flex; justify-content: center; align-items: center; flex-direction: column; font-size: 14px; transition: all 0.2s ease-in-out; transform: translate(-50%, -50%); }
+/* --- MAP STYLING (REVISED) --- */
+#game-screen h2, #game-screen #voting-status {
+    flex-shrink: 0;
+}
+
+#map-container {
+    overflow-y: auto;
+    overflow-x: auto; /* Allow horizontal scrolling if needed */
+    border: 1px solid #444;
+    border-radius: 8px;
+    flex-grow: 1;
+    min-height: 0;
+}
+
+#map-nodes {
+    position: relative; 
+    width: 1600px; /* The canvas is now 1600px wide */
+    height: 1600px; 
+    margin: 0 auto; 
+    background-color: #23272a;
+    overflow: hidden;
+}
+
+.node {
+    width: 100px; height: 100px; border: 3px solid #7289da;
+    background-color: #40444b; border-radius: 50%; position: absolute;
+    display: flex; justify-content: center; align-items: center;
+    flex-direction: column; font-size: 14px;
+    transition: all 0.2s ease-in-out; transform: translate(-50%, -50%);
+    z-index: 1;
+}
+
 .node.current { border-color: #fdd835; box-shadow: 0 0 15px #fdd835; }
 .node.cleared { border-color: #666; background-color: #222; color: #888; }
 .node.votable { border-color: #43b581; cursor: pointer; box-shadow: 0 0 15px #43b581; }
 .node.votable:hover { transform: translate(-50%, -50%) scale(1.1); }
 
-/* Battle Styling */
+.node-line {
+    position: absolute; height: 3px; background-color: #60646b;
+    transform-origin: 0 50%; z-index: 0;
+}
+
+/* --- Battle Styling (Unchanged) --- */
 #battle-container { display: flex; flex-direction: column; gap: 20px; }
 .battle-header { display: flex; justify-content: space-around; align-items: center; background-color: #23272a; padding: 10px; border-radius: 8px; }
 #phase-indicator { color: #fdd835; }
 #player-battle-area { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
 .player-battle-info { background-color: #40444b; padding: 10px; border-radius: 8px; border-left: 5px solid #7289da; }
 .player-battle-info.is-self { border-left-color: #43b581; }
+.player-battle-info.dead { background-color: #2c2f33; opacity: 0.6; border-left-color: #992d22; }
 .player-battle-info p { margin: 4px 0; }
 #player-action-area { background-color: #23272a; padding: 15px; border-radius: 8px; }
 #player-hand-container { display: flex; justify-content: center; gap: 10px; min-height: 150px; margin-bottom: 10px; padding: 10px; background-color: #2c2f33; border-radius: 5px; }
@@ -48,34 +104,6 @@ hr { border-color: #444; }
 #end-of-battle-screen { padding: 40px; background-color: #23272a; border-radius: 8px; }
 #end-of-battle-screen h2 { font-size: 3em; }
 
-/* ADD THESE STYLES AT THE END */
-#game-log-container {
-    background-color: #23272a;
-    border-radius: 8px;
-    padding: 10px 15px;
-    margin-top: 10px;
-}
-
-#game-log {
-    height: 100px;
-    overflow-y: auto;
-    text-align: left;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 5px;
-    background-color: #2c2f33;
-    border-radius: 4px;
-}
-
-#game-log p {
-    margin: 0 0 5px 0;
-    padding-bottom: 5px;
-    border-bottom: 1px solid #40444b;
-}
-
-/* ADD THIS CLASS AT THE END */
-.player-battle-info.dead {
-    background-color: #2c2f33;
-    opacity: 0.6;
-    border-left-color: #992d22;
-}
+#game-log-container { background-color: #23272a; border-radius: 8px; padding: 10px 15px; margin-top: 10px; }
+#game-log { height: 100px; overflow-y: auto; text-align: left; font-family: 'Courier New', Courier, monospace; font-size: 14px; padding: 5px; background-color: #2c2f33; border-radius: 4px; }
+#game-log p { margin: 0 0 5px 0; padding-bottom: 5px; border-bottom: 1px solid #444; }

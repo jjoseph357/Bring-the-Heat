@@ -1,6 +1,6 @@
 import { decks, monsters } from './config.js';
 import * as ui from './ui.js';
-import { generateMap, createDeck, shuffleDeck } from './game-logic.js';
+import { generateNewMap, createDeck, shuffleDeck } from './game-logic.js'; // Import the new function
 import * as engine from './battle-engine.js';
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
@@ -22,12 +22,24 @@ export function init(firebaseConfig, playerName, deckId) {
     ui.elements.drawCardBtn.onclick = drawCard;
     ui.elements.attackBtn.onclick = performAttack;
     ui.elements.returnToMapBtn.onclick = () => isHost && returnToMap();
-    ui.elements.deckSelect.onchange = () => {
+    ui.elements.lobbyDeckSelect.onchange = () => {
+        // Check if we are actually in a lobby and the game hasn't started.
         if (lobbyData && lobbyData.gameState.status === 'lobby') {
+            const newDeckId = ui.elements.lobbyDeckSelect.value;
             const playerRef = ref(db, `lobbies/${currentLobby}/players/${currentPlayerId}/deck`);
-            set(playerRef, ui.elements.deckSelect.value);
+            // Update the player's deck choice in Firebase.
+            set(playerRef, newDeckId);
+
+            // Also update the details view for immediate feedback
+            const selectedDeck = decks[newDeckId];
+            let cardList = selectedDeck.cards.map(card => `<li>Value ${card.v}: ${card.c} cards</li>`).join('');
+            ui.elements.lobbyDeckDetails.innerHTML = `
+                <p><strong>Jackpot:</strong> ${selectedDeck.jackpot}</p>
+                <ul>${cardList}</ul>
+            `;
         }
     };
+
     ui.elements.defeatContinueBtn.onclick = () => {
         if (isHost) {
             const updates = { '/battle': null, '/map': null, '/votes': null, '/gameState/status': 'lobby' };
@@ -85,7 +97,9 @@ function listenToLobbyChanges() {
             ui.showScreen(ui.elements.multiplayerLobby);
             updatePlayerList(lobbyData.players);
         } else if (gameState.status === 'map_vote') {
-            if (isHost && !lobbyData.map) set(child(lobbyRef, 'map'), generateMap());
+            if (isHost && !lobbyData.map) {
+                set(child(lobbyRef, 'map'), generateNewMap());
+            }
             if (lobbyData.map) {
                 ui.showGameScreen('map');
                 ui.renderMap(lobbyData.map, gameState, castVote);

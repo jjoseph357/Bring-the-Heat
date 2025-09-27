@@ -16,24 +16,19 @@ export const decks = {
     deck4: { name: "Low Roller", jackpot: 21, g: (sum) => 0.1 + (4.5 - 0.1) * Math.pow(sum / 21, 6), cards: [{ v: 1, c: 12 }, { v: 2, c: 12 }, { v: 3, c: 12 }] }
 };
 
-// MODIFIED: Monster stats are updated.
 export const monsters = {
-    slime: {
-        name: "Vicious Slime",
-        hp: 150,
-        attack: 5,
-        hitChance: 0.30, 
+    // Tier for Normal Battles
+    normal: {
+        slime: { name: "Vicious Slime", hp: 150, attack: 5, hitChance: 0.30 },
+        goblin: { name: "Cave Goblin", hp: 120, attack: 10, hitChance: 0.40 }
     },
-    goblin: {
-        name: "Cave Goblin",
-        hp: 120,
-        attack: 10,
-        hitChance: 0.40, 
+    // Tier for Elite Battles
+    elite: {
+        stoneGolem: { name: "Stone Golem", hp: 250, attack: 15, hitChance: 0.60 },
+        arcaneSprite: { name: "Arcane Sprite", hp: 100, attack: 25, hitChance: 0.50 }
     },
+    // Tier for the Final Boss
     boss: {
-        name: "The Node Guardian",
-        hp: 300,
-        attack: 15,
-        hitChance: 0.50, 
+        nodeGuardian: { name: "The Node Guardian", hp: 300, attack: 15, hitChance: 0.50 }
     }
 };

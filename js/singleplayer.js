@@ -1,7 +1,7 @@
 // MODIFIED: Added 'monsters' to the import from config.js
 import { decks, monsters } from './config.js';
 import * as ui from './ui.js';
-import { generateMap, createDeck, shuffleDeck } from './game-logic.js';
+import { generateNewMap, createDeck, shuffleDeck } from './game-logic.js'; // Import the new function
 import * as engine from './battle-engine.js';
 
 let state = {};
@@ -15,7 +15,7 @@ export function start(playerName, deckId) {
             hp: 100,
             maxHp: 100
         },
-        map: generateMap(),
+        map: generateNewMap(),
         gameState: {
             status: 'map_vote',
             currentNodeId: null,
