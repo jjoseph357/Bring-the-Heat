@@ -3,6 +3,7 @@ import { elements, showScreen, updateDeckDetails } from './ui.js';
 import * as singleplayer from './singleplayer.js';
 import * as multiplayer from './multiplayer.js';
 
+
 function init() {
     // Initial setup
     updateDeckDetails();

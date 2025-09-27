@@ -2,7 +2,7 @@
 import { decks, monsters } from './config.js';
 import * as ui from './ui.js';
 import { generateMap, createDeck, shuffleDeck } from './game-logic.js';
-import * as engine from './battle-engine.js'; // Import the new engine
+import * as engine from './battle-engine.js';
 
 let state = {};
 
@@ -45,7 +45,6 @@ function initializeBattle() {
     const myDeckConfig = decks[state.player.deckId];
     const monsterType = state.gameState.currentNodeId === 'node-boss' ? 'boss' : 'slime';
     const monsterData = monsters[monsterType];
-
     state.battle = {
         phase: 'PLAYER_TURN',
         monster: { ...monsterData },
@@ -54,18 +53,16 @@ function initializeBattle() {
             [state.player.id]: {
                 name: state.player.name, hp: state.player.hp, maxHp: state.player.maxHp,
                 mana: 20, deck: shuffleDeck(createDeck(myDeckConfig)),
-                deckId: state.player.deckId, // Pass deckId to the battle state
+                deckId: state.player.deckId,
                 hand: [], sum: 0, charge: 0,
                 status: 'needs_bet',
             }
         },
         turn: 1,
     };
-    
     ui.showGameScreen('battle');
     ui.setTimerVisibility(false);
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
-    
     ui.elements.chargeBtn.onclick = chargeAttack;
     ui.elements.drawCardBtn.onclick = drawCard;
     ui.elements.attackBtn.onclick = performAttack;
@@ -79,15 +76,12 @@ function logBattleMessage(message) {
 function chargeAttack() {
     const myData = state.battle.players[state.player.id];
     if (myData.status !== 'needs_bet') return;
-
     const chargeValue = parseInt(ui.elements.manaInput.value, 10);
     const result = engine.handleCharge(myData, chargeValue);
-
     if (result.error) {
         alert(result.error);
         return;
     }
-
     state.battle.players[state.player.id] = result.updatedPlayer;
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
 }
@@ -96,7 +90,7 @@ function drawCard() {
     const myData = state.battle.players[state.player.id];
     if (myData.status !== 'acting') return;
 
-    myData.status = 'waiting';
+    myData.status = 'waiting'; // Lock turn
     ui.disableActionButtons();
     
     const result = engine.handleDraw(myData);
@@ -116,7 +110,7 @@ function performAttack() {
     const myData = state.battle.players[state.player.id];
     if (myData.status !== 'acting') return;
     
-    myData.status = 'waiting';
+    myData.status = 'waiting'; // Lock turn
     ui.disableActionButtons();
 
     const result = engine.handleAttack(myData);
@@ -163,7 +157,10 @@ function startEnemyTurn() {
 function startNextPlayerTurn() {
     const myData = state.battle.players[state.player.id];
     
-    if (myData.status === 'waiting') {
+    // Set status for the new turn based on the result of the last one.
+    if (myData.charge === 0) {
+        myData.status = 'needs_bet';
+    } else {
         myData.status = 'acting';
     }
 

@@ -1,5 +1,41 @@
 {
+  "name": "infernos-gambit",
+  "version": "1.0.0",
+  "description": "A card-based adventure game.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "author": "",
+  "license": "ISC",
   "dependencies": {
     "firebase": "^12.3.0"
+  },
+  "devDependencies": {
+    "electron": "^38.1.2",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.infernosgambit.game",
+    "productName": "Inferno's Gambit",
+    "files": [
+      "main.js",
+      "index.html",
+      "style.css",
+      "js/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png"
+    }
   }
 }
