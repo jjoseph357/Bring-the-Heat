@@ -15,3 +15,24 @@ export const decks = {
     deck3: { name: "High Stakes", jackpot: 10, g: (sum) => 0.30 + (14.0 - 0.30) * (Math.exp(4.2 * (sum / 9)) - 1) / (Math.exp(4.2) - 1), cards: [{ v: 1, c: 10 }, { v: 2, c: 10 }, { v: 3, c: 10 }, { v: 10, c: 6 }] },
     deck4: { name: "Low Roller", jackpot: 21, g: (sum) => 0.55 + (4.5 - 0.55) * (Math.exp(2.0 * (sum / 21)) - 1) / (Math.exp(2.0) - 1), cards: [{ v: 1, c: 12 }, { v: 2, c: 12 }, { v: 3, c: 12 }] }
 };
+
+export const monsters = {
+    slime: {
+        name: "Vicious Slime",
+        hp: 150,
+        attack: 10,
+        hitChance: 0.80, // 80% chance to hit
+    },
+    goblin: {
+        name: "Cave Goblin",
+        hp: 120,
+        attack: 15,
+        hitChance: 0.70, // 70% chance to hit
+    },
+    boss: {
+        name: "The Node Guardian",
+        hp: 300,
+        attack: 20,
+        hitChance: 0.90, // 90% chance to hit
+    }
+};

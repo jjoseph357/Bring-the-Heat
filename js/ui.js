@@ -46,6 +46,8 @@ export const elements = {
     drawCardBtn: document.getElementById('draw-card-btn'),
     attackBtn: document.getElementById('attack-btn'),
     returnToMapBtn: document.getElementById('return-to-map-btn'),
+    gameLog: document.getElementById('game-log'), // ADD THIS
+
 };
 
 export function showScreen(screenElement) {
@@ -135,7 +137,7 @@ export function updateBattleUI(battleData, myPlayerId, myDeckId) {
         playerArea.appendChild(playerCard);
     }
 
-        const myData = battleData.players[myPlayerId];
+    const myData = battleData.players[myPlayerId];
     if (!myData) return;
 
     elements.playerMoney.textContent = Math.floor(myData.money); // Round money for display
@@ -153,6 +155,20 @@ export function updateBattleUI(battleData, myPlayerId, myDeckId) {
     
     elements.betInput.style.display = canBet ? 'inline-block' : 'none';
     elements.placeBetBtn.style.display = canBet ? 'inline-block' : 'none';
+
+    elements.gameLog.innerHTML = '';
+    if (battleData.log) {
+        // Get the last 5 messages from the log object
+        const messages = Object.values(battleData.log).slice(-5);
+        messages.forEach(logEntry => {
+            const p = document.createElement('p');
+            p.textContent = logEntry.message;
+            elements.gameLog.appendChild(p);
+        });
+        // Auto-scroll to the bottom
+        elements.gameLog.scrollTop = elements.gameLog.scrollHeight;
+    }
+
 
     // MODIFICATION: Explicitly enable/disable the buttons based on state
     elements.drawCardBtn.style.display = canAct ? 'inline-block' : 'none';

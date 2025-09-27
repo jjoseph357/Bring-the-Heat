@@ -1,4 +1,5 @@
-import { decks } from './config.js';
+// MODIFIED: Added 'monsters' to the import from config.js
+import { decks, monsters } from './config.js';
 import * as ui from './ui.js';
 import { generateMap, createDeck, shuffleDeck } from './game-logic.js';
 
@@ -32,18 +33,22 @@ function onNodeSelect(nodeId) {
     initializeBattle();
 }
 
-// MODIFIED: Timer logic removed
+// This function will now work correctly
 function initializeBattle() {
     const myDeckConfig = decks[state.player.deckId];
+    const monsterType = state.gameState.currentNodeId === 'node-boss' ? 'boss' : 'slime';
+    const monsterData = monsters[monsterType];
+
     state.battle = {
         phase: 'PLAYER_TURN',
-        monster: { hp: 150, maxHp: 150, attack: 10 },
+        monster: { ...monsterData },
+        log: [], // Use a simple array for single player log
         players: {
             [state.player.id]: {
                 name: state.player.name, hp: state.player.hp, maxHp: state.player.maxHp,
                 money: 100, deck: shuffleDeck(createDeck(myDeckConfig)),
                 hand: [], sum: 0, bet: 0,
-                status: 'needs_bet', // Player must bet to start.
+                status: 'needs_bet',
             }
         },
         turn: 1,
@@ -59,7 +64,10 @@ function initializeBattle() {
     ui.elements.returnToMapBtn.onclick = returnToMap;
 }
 
-// MODIFIED: This action no longer ends the turn.
+function logBattleMessage(message) {
+    state.battle.log.push({ message });
+}
+
 function placeBet() {
     const myData = state.battle.players[state.player.id];
     if (myData.status !== 'needs_bet') return;
@@ -72,23 +80,18 @@ function placeBet() {
     
     myData.bet = betValue;
     myData.money -= betValue;
-    myData.status = 'acting'; // Now the player can Draw or Attack.
+    myData.status = 'acting';
 
-    // Update the UI; the turn continues.
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
 }
 
-// MODIFIED: Ends the turn. On success, status remains 'acting' for the next turn.
-// MODIFIED: drawCard now disables controls immediately.
 function drawCard() {
     const myData = state.battle.players[state.player.id];
-    if (myData.status !== 'acting') return; // Guard clause
+    if (myData.status !== 'acting') return;
 
-    // --- FIX: Immediately lock the player's turn ---
     myData.status = 'waiting';
     ui.disableActionButtons();
-    // ---------------------------------------------
-
+    
     if (myData.deck.length === 0) {
         myData.deck = shuffleDeck(createDeck(decks[state.player.deckId]));
     }
@@ -97,43 +100,42 @@ function drawCard() {
     myData.hand.push(drawnCard);
     myData.sum += drawnCard;
     
-    // Update UI to show the card, but buttons will remain disabled
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
 
     const deckConfig = decks[state.player.deckId];
     if (myData.sum > deckConfig.jackpot) {
         alert("BUST!");
+        logBattleMessage(`${myData.name} busted!`);
         setTimeout(() => {
-            myData.status = 'needs_bet'; // Busted, must bet next turn.
+            myData.status = 'needs_bet';
             myData.hand = [];
             myData.sum = 0;
             myData.bet = 0;
             startEnemyTurn();
         }, 1500); 
     } else {
-        // Successful draw, status for next turn remains 'acting'.
+        logBattleMessage(`${myData.name} drew a card.`);
         setTimeout(startEnemyTurn, 1000);
     }
 }
 
-// MODIFIED: Ends the turn and forces a new bet on the next turn.
 function performAttack() {
     const myData = state.battle.players[state.player.id];
-    if (myData.status !== 'acting') return; // Guard clause
-
-    // --- FIX: Immediately lock the player's turn ---
+    if (myData.status !== 'acting') return;
+    
     myData.status = 'waiting';
     ui.disableActionButtons();
-    // ---------------------------------------------
-    
+
     const deckConfig = decks[state.player.deckId];
     const winnings = myData.bet * deckConfig.g(myData.sum);
     const damage = Math.floor(winnings);
     
+    logBattleMessage(`${myData.name} attacks for ${damage} damage!`);
+    
     state.battle.monster.hp = Math.max(0, state.battle.monster.hp - damage);
     
     myData.money = Math.floor(myData.money + winnings);
-    myData.status = 'needs_bet'; // Attacked, so must bet next turn.
+    myData.status = 'needs_bet';
     myData.hand = [];
     myData.sum = 0;
     myData.bet = 0;
@@ -147,15 +149,22 @@ function performAttack() {
     }
 }
 
-
 function startEnemyTurn() {
     state.battle.phase = 'ENEMY_TURN';
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
     
     setTimeout(() => {
         const myData = state.battle.players[state.player.id];
-        myData.hp = Math.max(0, myData.hp - state.battle.monster.attack);
-        state.player.hp = myData.hp;
+        const monster = state.battle.monster;
+        
+        if (Math.random() < monster.hitChance) {
+            const damage = monster.attack;
+            logBattleMessage(`${monster.name} hits ${myData.name} for ${damage} damage!`);
+            myData.hp = Math.max(0, myData.hp - damage);
+            state.player.hp = myData.hp;
+        } else {
+            logBattleMessage(`${monster.name} attacks ${myData.name} but MISSES!`);
+        }
 
         if (myData.hp <= 0) {
             endBattle('defeat');
@@ -165,12 +174,9 @@ function startEnemyTurn() {
     }, 1500);
 }
 
-// MODIFIED: On the next turn, we check the status that was set by the previous action.
 function startNextPlayerTurn() {
     const myData = state.battle.players[state.player.id];
-
-    // If the last action was a successful draw, the status will still be 'acting'.
-    // If it was a bust or attack, it will be 'needs_bet'.
+    
     if (myData.status === 'waiting') {
         myData.status = 'acting';
     }
@@ -179,19 +185,6 @@ function startNextPlayerTurn() {
     state.battle.turn++;
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
 }
-
-// NEW FUNCTION: To handle the start of a new betting round
-function startNextBettingPhase() {
-    const myData = state.battle.players[state.player.id];
-    myData.status = 'betting';
-    myData.bet = 0; // Clear old bet
-    
-    state.battle.phase = 'BETTING';
-    state.battle.turn++;
-    
-    ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
-}
-
 
 function endBattle(result) {
     state.battle = null;
