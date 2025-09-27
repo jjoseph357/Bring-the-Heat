@@ -1,0 +1,9 @@
+const firebaseConfig = {
+  apiKey: "AIzaSyA74kVesCebxBsR9veng56MpxqvTBZ6618",
+  authDomain: "bring-the-heat-3ea0d.firebaseapp.com",
+  databaseURL: "https://bring-the-heat-3ea0d-default-rtdb.firebaseio.com",
+  projectId: "bring-the-heat-3ea0d",
+  storageBucket: "bring-the-heat-3ea0d.firebasestorage.app",
+  messagingSenderId: "125412613431",
+  appId: "1:125412613431:web:1cc0c3d807380f8aaaceb2"
+};

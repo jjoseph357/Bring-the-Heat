@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Combat</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Main Menu -->
+    <div id="main-menu" class="screen active">
+        <h1>Card Combat</h1>
+        <input type="text" id="player-name-input" placeholder="Enter Your Name" maxlength="12">
+        <div id="deck-selection-container">
+            <h3>Choose Your Deck:</h3>
+            <select id="deck-select">
+                <option value="deck1">Standard Issue</option>
+                <option value="deck2">Pyramid Scheme</option>
+                <option value="deck3">High Stakes</option>
+                <option value="deck4">Low Roller</option>
+            </select>
+            <div id="deck-details"></div>
+        </div>
+        <button id="single-player-btn">Single Player</button>
+        <button id="multiplayer-btn">Multiplayer</button>
+    </div>
+
+    <!-- Multiplayer Lobby -->
+    <div id="multiplayer-lobby" class="screen">
+        <h2>Multiplayer Lobby</h2>
+        <input type="text" id="lobby-code-input" placeholder="Enter Lobby Code" maxlength="4">
+        <button id="join-lobby-btn">Join Lobby</button>
+        <button id="create-lobby-btn">Create Lobby</button>
+        <hr>
+        <h3>Players in Lobby:</h3>
+        <div id="player-list"></div>
+        <button id="start-game-btn" style="display: none;">Start Game</button>
+        <button id="back-to-main-menu-btn">Back to Main Menu</button>
+    </div>
+
+    <!-- Main Game Screen -->
+    <div id="game-screen" class="screen">
+        <!-- Map View -->
+        <div id="map-container">
+            <h2>The Expedition Map</h2>
+            <div id="map-nodes"></div>
+            <p id="voting-status"></p>
+        </div>
+        
+        <!-- Battle View -->
+        <div id="battle-container" class="hidden">
+            <div class="battle-header">
+                <div id="monster-info">
+                    <h3 id="monster-name">Vicious Slime</h3>
+                    <p>HP: <span id="monster-hp">100</span></p>
+                </div>
+                <div id="phase-indicator">
+                    <h2 id="phase-title">Waiting...</h2>
+                    <p id="timer-container">Time Left: <span id="turn-timer">--</span></p>
+                </div>
+            </div>
+            <div id="player-battle-area"></div>
+            <div id="player-action-area">
+                <div id="player-personal-stats">
+                    <p>My Money: $<span id="player-money">100</span></p>
+                    <!-- ADDED THIS LINE -->
+                    <p>Jackpot Target: <span id="player-jackpot">21</span></p>
+                    <p>My Sum: <span id="player-sum">0</span></p>
+                    <p>Multiplier: <span id="player-multiplier">1.00</span>x</p>
+                </div>
+                <div id="player-hand-container"></div>
+                <div id="game-controls">
+                    <input type="number" id="bet-input" placeholder="Enter Bet">
+                    <button id="place-bet-btn">Place Bet</button>
+                    <button id="draw-card-btn">Draw Card</button>
+                    <button id="attack-btn">Attack</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- End of Battle Screen -->
+        <div id="end-of-battle-screen" class="hidden">
+            <h2 id="battle-result-title">Victory!</h2>
+            <p id="battle-result-text">You defeated the monster!</p>
+            <button id="return-to-map-btn">Return to Map</button>
+        </div>
+    </div>
+
+    <!-- Main script entry point -->
+    <script src="js/main.js" type="module"></script>
+
+</body>
+</html>
