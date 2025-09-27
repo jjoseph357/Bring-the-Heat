@@ -19,8 +19,8 @@ export const decks = {
 export const monsters = {
     // Tier for Normal Battles
     normal: {
-        slime: { name: "Vicious Slime", hp: 50, attack: 5, hitChance: 0.30, goldDrop: [7, 15] },
-        goblin: { name: "Cave Goblin", hp: 50, attack: 10, hitChance: 0.40, goldDrop: [10, 20] }
+        slime: { name: "Goblin", hp: 50, attack: 5, hitChance: 0.30, goldDrop: [7, 15] },
+        goblin: { name: "Slime", hp: 30, attack: 5, hitChance: 0.40, goldDrop: [10, 20] }
     },
     // Tier for Elite Battles
     elite: {
