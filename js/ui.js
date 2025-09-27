@@ -139,9 +139,11 @@ export function disableActionButtons() {
     elements.attackBtn.disabled = true;
 }
 
-export function updatePartyStats(players) {
+export function updatePartyStats(players, myPlayerId, reviveCallback) {
     const container = elements.partyStatsContainer;
     container.innerHTML = '';
+    const myData = players[myPlayerId];
+
     for (const pId in players) {
         const pData = players[pId];
         const card = document.createElement('div');
@@ -149,10 +151,34 @@ export function updatePartyStats(players) {
         card.innerHTML = `
             <h4>${pData.name}</h4>
             <p>HP: ${pData.hp} / ${pData.maxHp || 100}</p>
+            <p>Gold: ${pData.gold || 0}</p>
         `;
+
+        // --- NEW: Revive Button Logic ---
+        if (pData.hp <= 0) {
+            const reviveCost = 100 + ((pData.deaths || 0) * 100);
+            const reviveBtn = document.createElement('button');
+            reviveBtn.className = 'revive-btn';
+            reviveBtn.textContent = `Revive (${reviveCost} Gold)`;
+
+            // Players can only revive themselves and only if they have enough gold.
+            if (pId !== myPlayerId || !myData || myData.gold < reviveCost) {
+                reviveBtn.disabled = true;
+            }
+
+            reviveBtn.onclick = () => {
+                if (reviveCallback) {
+                    reviveCallback(pId);
+                }
+            };
+            card.appendChild(reviveBtn);
+        }
+        // --------------------------------
+
         container.appendChild(card);
     }
 }
+
 
 export function updateBattleUI(battleData, myPlayerId, myDeckId) {
     const deckConfig = myDeckId ? decks[myDeckId] : null;
@@ -254,31 +280,36 @@ function displayCard(value, container) {
     container.appendChild(cardEl);
 }
 
-export function showGameScreen(mode, result, isHost) {
+export function showGameScreen(mode, resultData, isHost) {
     showScreen(elements.gameScreen);
     elements.mapContainer.classList.add('hidden');
     elements.battleContainer.classList.add('hidden');
     elements.endOfBattleScreen.classList.add('hidden');
-    elements.partyStatsContainer.style.display = 'none'; // Hide by default
+    elements.partyStatsContainer.style.display = 'none';
 
     if (mode === 'map') {
         elements.mapContainer.classList.remove('hidden');
-        elements.partyStatsContainer.style.display = 'flex'; // Show on map screen
+        elements.partyStatsContainer.style.display = 'flex';
     }
     if (mode === 'battle') elements.battleContainer.classList.remove('hidden');
     if (mode === 'end_battle') {
-
         const titleEl = document.getElementById('battle-result-title');
         const textEl = document.getElementById('battle-result-text');
+        const goldRewardEl = document.getElementById('gold-reward-text');
         
-        if (result === 'victory') {
+        if (resultData.result === 'victory') {
             titleEl.textContent = 'Victory!';
             textEl.textContent = 'The monster has been vanquished.';
+            // --- NEW: Display gold reward ---
+            goldRewardEl.textContent = `Each party member receives ${resultData.goldReward} Gold!`;
+            goldRewardEl.style.display = 'block';
+            // --------------------------------
             elements.returnToMapBtn.style.display = isHost ? 'block' : 'none';
             elements.defeatContinueBtn.style.display = 'none';
         } else { // defeat
             titleEl.textContent = 'Defeat!';
             textEl.textContent = 'Your party has fallen. The expedition is over.';
+            goldRewardEl.style.display = 'none'; // Hide gold text on defeat
             elements.returnToMapBtn.style.display = 'none';
             elements.defeatContinueBtn.style.display = isHost ? 'block' : 'none';
         }

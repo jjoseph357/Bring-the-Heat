@@ -7,16 +7,21 @@ let state = {};
 
 export function start(playerName, deckId) {
     state = {
-        player: { id: 'p1', name: playerName, deckId: deckId, hp: 100, maxHp: 100 },
+        player: { 
+            id: 'p1', name: playerName, deckId: deckId, hp: 100, maxHp: 100,
+            gold: 0, deaths: 0 // Initialize new stats
+        },
         map: generateNewMap(),
-        gameState: { status: 'map_vote', currentNodeId: null, clearedNodes: [0] }, // Start node is pre-cleared
+        gameState: { status: 'map_vote', currentNodeId: null, clearedNodes: [0] },
         battle: null,
     };
     ui.showGameScreen('map');
     ui.renderMap(state.map, state.gameState, onNodeSelect);
-    ui.updatePartyStats({ [state.player.id]: state.player }); // Initial party stats display
+    // Pass the revivePlayer function as a callback
+    ui.updatePartyStats({ [state.player.id]: state.player }, state.player.id, revivePlayer);
     ui.elements.defeatContinueBtn.onclick = () => { window.location.reload(); };
 }
+
 
 function onNodeSelect(nodeId) {
     state.gameState.currentNodeId = nodeId;
@@ -213,12 +218,45 @@ function startNextPlayerTurn() {
 }
 
 function endBattle(result) {
+    let goldReward = 0;
+    if (result === 'victory') {
+        const monsterType = state.battle.monsters[0].tier;
+        const monsterKey = state.battle.monsters[0].type;
+        const goldDropRange = monsters[monsterType][monsterKey].goldDrop;
+        goldReward = Math.floor(Math.random() * (goldDropRange[1] - goldDropRange[0] + 1)) + goldDropRange[0];
+        
+        // Add gold to the player if they are alive
+        if (state.player.hp > 0) {
+            state.player.gold += goldReward;
+        }
+    }
+
     state.battle = null;
     if (result === 'victory') {
         state.gameState.clearedNodes.push(state.gameState.currentNodeId);
     }
-    ui.showGameScreen('end_battle', result, true);
+    // Pass the result and reward info to the UI
+    ui.showGameScreen('end_battle', { result, goldReward }, true);
 }
+
+function revivePlayer(playerId) {
+    if (playerId !== state.player.id) return;
+    
+    const myData = state.player;
+    // --- THIS IS THE MODIFIED LINE ---
+    const reviveCost = 50 + (myData.deaths * 50);
+    // ---------------------------------
+
+    if (myData.gold >= reviveCost) {
+        myData.gold -= reviveCost;
+        myData.hp = myData.maxHp;
+        myData.deaths += 1;
+        ui.updatePartyStats({ [state.player.id]: state.player }, state.player.id, revivePlayer);
+    } else {
+        alert("Not enough gold to revive!");
+    }
+}
+
 
 function handleRestSite() {
     // --- THIS IS THE FIX: Use state.player, not state.battle.players ---
@@ -252,5 +290,5 @@ function returnToMap() {
     state.gameState.status = 'map_vote';
     ui.showGameScreen('map');
     ui.renderMap(state.map, state.gameState, onNodeSelect);
-    ui.updatePartyStats({ [state.player.id]: state.player }); // Update display with new HP
+    ui.updatePartyStats({ [state.player.id]: state.player }, state.player.id, revivePlayer);
 }

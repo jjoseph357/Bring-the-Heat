@@ -15,9 +15,21 @@ export function init(firebaseConfig, playerName, deckId) {
     db = getDatabase(app);
     myName = playerName;
     myDeckId = deckId;
+
+    // --- THIS IS THE FIX FOR THE VOTING BUG ---
+    // Initialize gameState correctly when the host starts the game.
+    ui.elements.startGameBtn.onclick = () => {
+        if (isHost) {
+            update(ref(db, `lobbies/${currentLobby}/gameState`), {
+                status: 'map_vote',
+                clearedNodes: [0] // Pre-clear the 'Start' node (ID 0)
+            });
+        }
+    };
+    // ------------------------------------------
+
     ui.elements.createLobbyBtn.onclick = createLobby;
     ui.elements.joinLobbyBtn.onclick = joinLobby;
-    ui.elements.startGameBtn.onclick = () => isHost && set(ref(db, `lobbies/${currentLobby}/gameState/status`), 'map_vote');
     ui.elements.chargeBtn.onclick = chargeAttack;
     ui.elements.drawCardBtn.onclick = drawCard;
     ui.elements.attackBtn.onclick = performAttack;
@@ -30,7 +42,10 @@ export function init(firebaseConfig, playerName, deckId) {
     };
     ui.elements.defeatContinueBtn.onclick = () => {
         if (isHost) {
-            const updates = { '/battle': null, '/map': null, '/votes': null, '/gameState/status': 'lobby' };
+            const updates = {
+                '/battle': null, '/map': null, '/votes': null,
+                '/gameState/status': 'lobby',
+            };
             Object.keys(lobbyData.players).forEach(pId => {
                 updates[`/players/${pId}/hp`] = 100;
             });
@@ -44,7 +59,7 @@ function createLobby() {
     currentLobby = lobbyCode; isHost = true;
     currentPlayerId = `player_${Date.now()}`;
     lobbyRef = ref(db, `lobbies/${currentLobby}`);
-    const initialPlayer = { name: myName, deck: myDeckId, hp: 100 };
+    const initialPlayer = { name: myName, deck: myDeckId, hp: 100, maxHp: 100, gold: 0, deaths: 0 };
     set(lobbyRef, { host: currentPlayerId, players: { [currentPlayerId]: initialPlayer }, gameState: { status: 'lobby' } });
     ui.elements.lobbyCodeInput.value = lobbyCode;
     ui.elements.lobbyCodeInput.disabled = true;
@@ -64,7 +79,7 @@ function joinLobby() {
             currentLobby = lobbyCode; lobbyRef = tempLobbyRef;
             currentPlayerId = `player_${Date.now()}`;
             const newPlayerRef = ref(db, `lobbies/${lobbyCode}/players/${currentPlayerId}`);
-            set(newPlayerRef, { name: myName, deck: myDeckId, hp: 100 });
+            set(newPlayerRef, { name: myName, deck: myDeckId, hp: 100, maxHp: 100, gold: 0, deaths: 0 });
             listenToLobbyChanges();
         } else {
             alert('Lobby does not exist or is full.');
@@ -91,15 +106,13 @@ function listenToLobbyChanges() {
             if (lobbyData.map) {
                 ui.showGameScreen('map');
                 ui.renderMap(lobbyData.map, gameState, castVote);
-                ui.updatePartyStats(players);
+                ui.updatePartyStats(players, currentPlayerId, revivePlayerMultiplayer);
                 if (isHost && lobbyData.votes) {
                     if (Object.keys(lobbyData.votes).length === Object.keys(players).length) {
                         const nextNodeId = performTally(lobbyData.votes);
                         const nodeType = lobbyData.map.nodes[nextNodeId].type;
                         switch (nodeType) {
-                            case 'Normal Battle':
-                            case 'Elite Battle':
-                            case 'Boss':
+                            case 'Normal Battle': case 'Elite Battle': case 'Boss':
                                 const newBattleState = createBattleState(nodeType, lobbyData);
                                 const updates = {
                                     [`/battle`]: newBattleState,
@@ -112,8 +125,7 @@ function listenToLobbyChanges() {
                             case 'Rest Site':
                                 handleRestSiteMultiplayer(nextNodeId);
                                 break;
-                            case 'Shop':
-                            case 'Unknown Event':
+                            case 'Shop': case 'Unknown Event':
                                 handlePlaceholderNodeMultiplayer(nextNodeId, nodeType);
                                 break;
                         }
@@ -121,12 +133,7 @@ function listenToLobbyChanges() {
                 }
             }
         } else if (gameState.status === 'battle') {
-            // --- THIS IS THE CRITICAL FIX ---
-            // If the status is 'battle' but the battle object hasn't arrived yet,
-            // do nothing and wait for the next update.
             if (!battleData || !battleData.players || !battleData.monsters) return;
-            // ------------------------------------
-            
             battleRef = ref(db, `lobbies/${currentLobby}/battle`);
             ui.showGameScreen('battle');
             const myDeckId = battleData.players[currentPlayerId]?.deckId;
@@ -134,12 +141,15 @@ function listenToLobbyChanges() {
             ui.updateTimer(battleData.phaseEndTime);
 
             if (isHost) {
-                if (battleData.monster.hp <= 0) {
-                    set(child(lobbyRef, 'gameState/status'), 'victory'); return;
+                const allMonstersDead = battleData.monsters.every(m => m.hp <= 0);
+                if (allMonstersDead) {
+                    handleVictory(battleData);
+                    return;
                 }
                 const livingPlayers = Object.values(battleData.players).filter(p => p.hp > 0);
                 if (livingPlayers.length === 0) {
-                    set(child(lobbyRef, 'gameState/status'), 'defeat'); return;
+                    set(child(lobbyRef, 'gameState/status'), 'defeat');
+                    return;
                 }
                 const allPlayersWaiting = livingPlayers.every(p => p.status === 'waiting');
                 if (battleData.phase === 'PLAYER_TURN' && allPlayersWaiting) {
@@ -158,7 +168,7 @@ function listenToLobbyChanges() {
                 }
             }
         } else if (gameState.status === 'victory' || gameState.status === 'defeat') {
-            ui.showGameScreen('end_battle', gameState.status, isHost);
+            ui.showGameScreen('end_battle', {result: gameState.status, goldReward: gameState.goldReward}, isHost);
         }
     });
 }
@@ -228,6 +238,83 @@ function logBattleMessage(message) {
     const logRef = ref(db, `lobbies/${currentLobby}/battle/log`);
     const newLogEntryRef = push(logRef);
     set(newLogEntryRef, { message, timestamp: Date.now() });
+}
+
+// --- THIS IS THE FIX FOR THE HP RESET BUG ---
+function handleVictory(battleData) {
+    if (!isHost) return;
+    const monster = battleData.monsters[0];
+    const monsterStats = monsters[monster.tier][monster.type];
+    const goldDropRange = monsterStats.goldDrop;
+    const goldReward = Math.floor(Math.random() * (goldDropRange[1] - goldDropRange[0] + 1)) + goldDropRange[0];
+    
+    const updates = {};
+    updates[`/gameState/status`] = 'victory';
+    updates[`/gameState/goldReward`] = goldReward;
+
+    // Explicitly sync final HP from battle back to the persistent player object
+    for (const pId in lobbyData.players) {
+        const finalBattleData = battleData.players[pId];
+        if (finalBattleData) {
+            // Player was in the battle, save their final HP
+            updates[`/players/${pId}/hp`] = finalBattleData.hp;
+            if (finalBattleData.hp > 0) {
+                // If they survived, also give them gold
+                updates[`/players/${pId}/gold`] = (lobbyData.players[pId].gold || 0) + goldReward;
+            }
+        }
+        // If a player wasn't in the battle (already dead), their HP is untouched and remains 0.
+    }
+    
+    update(lobbyRef, updates);
+}
+// ------------------------------------------
+
+function revivePlayerMultiplayer(playerId) {
+    if (playerId !== currentPlayerId) return;
+    const playerRef = ref(db, `lobbies/${currentLobby}/players/${playerId}`);
+    runTransaction(playerRef, (pData) => {
+        if (pData && pData.hp <= 0) {
+            // --- THIS IS THE MODIFIED LINE ---
+            const reviveCost = 50 + ((pData.deaths || 0) * 50);
+            // ---------------------------------
+            if (pData.gold >= reviveCost) {
+                pData.gold -= reviveCost;
+                pData.hp = pData.maxHp || 100;
+                pData.deaths = (pData.deaths || 0) + 1;
+            }
+        }
+        return pData;
+    });
+}
+
+
+function handleRestSiteMultiplayer(nodeId) {
+    if (!isHost) return;
+    const updates = {};
+    updates[`/gameState/status`] = 'map_vote';
+    updates[`/gameState/clearedNodes`] = [...(lobbyData.gameState.clearedNodes || []), nodeId];
+    updates['/votes'] = null;
+    for (const pId in lobbyData.players) {
+        const pData = lobbyData.players[pId];
+        if (pData.hp > 0) {
+            const result = engine.handleRest(pData);
+            updates[`/players/${pId}/hp`] = result.updatedPlayer.hp;
+            logBattleMessage(result.logMessage);
+        }
+    }
+    update(lobbyRef, updates);
+}
+
+function handlePlaceholderNodeMultiplayer(nodeId, nodeType) {
+    if (!isHost) return;
+    logBattleMessage(`The party arrived at an ${nodeType}.`);
+    const updates = {
+        '/gameState/status': 'map_vote',
+        '/gameState/clearedNodes': [...(lobbyData.gameState.clearedNodes || []), nodeId],
+        '/votes': null
+    };
+    update(lobbyRef, updates);
 }
 
 function forceEndTurn(battleData) {
@@ -353,10 +440,8 @@ function returnToMap() {
     runTransaction(gameStateRef, (gs) => {
         if (gs) {
             gs.status = 'map_vote';
-            if (!gs.clearedNodes) gs.clearedNodes = [];
-            if (!gs.clearedNodes.includes(gs.currentNodeId)) {
-                gs.clearedNodes.push(gs.currentNodeId);
-            }
+            gs.clearedNodes = [...(gs.clearedNodes || []), gs.currentNodeId];
+            gs.goldReward = null;
         }
         return gs;
     }).then(() => { remove(battleRef); });

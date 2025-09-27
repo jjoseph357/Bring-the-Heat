@@ -137,3 +137,18 @@ hr { border-color: #444; }
 #monster-area { display: flex; justify-content: center; align-items: center; gap: 15px; flex-grow: 1; }
 .monster-card { background-color: #40444b; border: 2px solid #992d22; border-radius: 8px; padding: 10px; min-width: 150px; transition: all 0.2s ease-in-out; }
 .monster-card.dead { opacity: 0.5; border-color: #555; background-color: #2c2f33; }
+/* --- NEW STYLE FOR REVIVE BUTTON --- */
+.revive-btn {
+    background-color: #43b581; /* Green */
+    margin-top: 5px;
+    width: 100%;
+    padding: 5px;
+    font-size: 14px;
+}
+.revive-btn:hover {
+    background-color: #3aa070;
+}
+.revive-btn:disabled {
+    background-color: #555;
+    color: #999;
+}
