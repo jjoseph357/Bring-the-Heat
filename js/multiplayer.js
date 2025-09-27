@@ -1,6 +1,6 @@
 import { decks, monsters } from './config.js';
 import * as ui from './ui.js';
-import { generateNewMap, createDeck, shuffleDeck } from './game-logic.js'; // Import the new function
+import { generateNewMap, createDeck, shuffleDeck } from './game-logic.js';
 import * as engine from './battle-engine.js';
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
@@ -22,24 +22,12 @@ export function init(firebaseConfig, playerName, deckId) {
     ui.elements.drawCardBtn.onclick = drawCard;
     ui.elements.attackBtn.onclick = performAttack;
     ui.elements.returnToMapBtn.onclick = () => isHost && returnToMap();
-    ui.elements.lobbyDeckSelect.onchange = () => {
-        // Check if we are actually in a lobby and the game hasn't started.
+    ui.elements.deckSelect.onchange = () => {
         if (lobbyData && lobbyData.gameState.status === 'lobby') {
-            const newDeckId = ui.elements.lobbyDeckSelect.value;
             const playerRef = ref(db, `lobbies/${currentLobby}/players/${currentPlayerId}/deck`);
-            // Update the player's deck choice in Firebase.
-            set(playerRef, newDeckId);
-
-            // Also update the details view for immediate feedback
-            const selectedDeck = decks[newDeckId];
-            let cardList = selectedDeck.cards.map(card => `<li>Value ${card.v}: ${card.c} cards</li>`).join('');
-            ui.elements.lobbyDeckDetails.innerHTML = `
-                <p><strong>Jackpot:</strong> ${selectedDeck.jackpot}</p>
-                <ul>${cardList}</ul>
-            `;
+            set(playerRef, ui.elements.deckSelect.value);
         }
     };
-
     ui.elements.defeatContinueBtn.onclick = () => {
         if (isHost) {
             const updates = { '/battle': null, '/map': null, '/votes': null, '/gameState/status': 'lobby' };
@@ -88,42 +76,63 @@ function listenToLobbyChanges() {
     onValue(lobbyRef, (snapshot) => {
         if (!snapshot.exists()) return; 
         lobbyData = snapshot.val();
-        const { gameState, battle: battleData } = lobbyData;
+        const { gameState, battle: battleData, players } = lobbyData;
+        
         if (isHost && hostTurnTimer) {
-            clearInterval(hostTurnTimer);
-            hostTurnTimer = null;
+            clearInterval(hostTurnTimer); hostTurnTimer = null;
         }
+
         if (gameState.status === 'lobby') {
             ui.showScreen(ui.elements.multiplayerLobby);
-            updatePlayerList(lobbyData.players);
-        } else if (gameState.status === 'map_vote') {
-            if (isHost && !lobbyData.map) {
-                set(child(lobbyRef, 'map'), generateNewMap());
-            }
+            updatePlayerList(players);
+        }
+        else if (gameState.status === 'map_vote') {
+            if (isHost && !lobbyData.map) set(child(lobbyRef, 'map'), generateNewMap());
             if (lobbyData.map) {
                 ui.showGameScreen('map');
                 ui.renderMap(lobbyData.map, gameState, castVote);
+                ui.updatePartyStats(players);
                 if (isHost && lobbyData.votes) {
-                    if (Object.keys(lobbyData.votes).length === Object.keys(lobbyData.players).length) {
+                    if (Object.keys(lobbyData.votes).length === Object.keys(players).length) {
                         const nextNodeId = performTally(lobbyData.votes);
-                        const newBattleState = createBattleState(nextNodeId, lobbyData);
-                        const updates = {
-                            [`/battle`]: newBattleState,
-                            [`/gameState/status`]: 'battle',
-                            [`/gameState/currentNodeId`]: nextNodeId,
-                            [`/votes`]: null
-                        };
-                        update(lobbyRef, updates);
+                        const nodeType = lobbyData.map.nodes[nextNodeId].type;
+                        switch (nodeType) {
+                            case 'Normal Battle':
+                            case 'Elite Battle':
+                            case 'Boss':
+                                const newBattleState = createBattleState(nodeType, lobbyData);
+                                const updates = {
+                                    [`/battle`]: newBattleState,
+                                    [`/gameState/status`]: 'battle',
+                                    [`/gameState/currentNodeId`]: nextNodeId,
+                                    [`/votes`]: null
+                                };
+                                update(lobbyRef, updates);
+                                break;
+                            case 'Rest Site':
+                                handleRestSiteMultiplayer(nextNodeId);
+                                break;
+                            case 'Shop':
+                            case 'Unknown Event':
+                                handlePlaceholderNodeMultiplayer(nextNodeId, nodeType);
+                                break;
+                        }
                     }
                 }
             }
         } else if (gameState.status === 'battle') {
-            if (!battleData) return;
+            // --- THIS IS THE CRITICAL FIX ---
+            // If the status is 'battle' but the battle object hasn't arrived yet,
+            // do nothing and wait for the next update.
+            if (!battleData || !battleData.players || !battleData.monsters) return;
+            // ------------------------------------
+            
             battleRef = ref(db, `lobbies/${currentLobby}/battle`);
             ui.showGameScreen('battle');
             const myDeckId = battleData.players[currentPlayerId]?.deckId;
             ui.updateBattleUI(battleData, currentPlayerId, myDeckId);
             ui.updateTimer(battleData.phaseEndTime);
+
             if (isHost) {
                 if (battleData.monster.hp <= 0) {
                     set(child(lobbyRef, 'gameState/status'), 'victory'); return;
@@ -137,11 +146,14 @@ function listenToLobbyChanges() {
                     startEnemyTurn();
                 } else if (battleData.phase === 'PLAYER_TURN') {
                     hostTurnTimer = setInterval(() => {
-                        if (Date.now() > battleData.phaseEndTime) {
-                            forceEndTurn(battleData);
-                            clearInterval(hostTurnTimer);
-                            hostTurnTimer = null;
-                        }
+                        get(battleRef).then(currentSnapshot => {
+                            const currentBattleData = currentSnapshot.val();
+                            if (currentBattleData && Date.now() > currentBattleData.phaseEndTime) {
+                                forceEndTurn(currentBattleData);
+                                clearInterval(hostTurnTimer);
+                                hostTurnTimer = null;
+                            }
+                        });
                     }, 1000);
                 }
             }
@@ -178,13 +190,23 @@ function performTally(votes) {
     return winners[Math.floor(Math.random() * winners.length)];
 }
 
-function createBattleState(nodeId, currentLobbyData) {
-    const monsterType = nodeId === 'node-boss' ? 'boss' : Object.keys(monsters).filter(m => m !== 'boss')[Math.floor(Math.random() * 2)];
-    const baseMonster = monsters[monsterType];
+function createBattleState(nodeType, currentLobbyData) {
+    let monsterTier, monsterKey;
+    if (nodeType === 'Boss') {
+        monsterTier = 'boss'; monsterKey = 'nodeGuardian';
+    } else if (nodeType === 'Elite Battle') {
+        monsterTier = 'elite'; const eliteKeys = Object.keys(monsters.elite);
+        monsterKey = eliteKeys[Math.floor(Math.random() * eliteKeys.length)];
+    } else {
+        monsterTier = 'normal'; const normalKeys = Object.keys(monsters.normal);
+        monsterKey = normalKeys[Math.floor(Math.random() * normalKeys.length)];
+    }
+    const baseMonster = monsters[monsterTier][monsterKey];
     const livingPlayers = Object.values(currentLobbyData.players).filter(p => p.hp > 0).length;
     const battleState = {
         phase: 'PLAYER_TURN', phaseEndTime: Date.now() + 25000,
-        monster: { type: monsterType, name: baseMonster.name, hp: baseMonster.hp * livingPlayers },
+        monster: { tier: monsterTier, type: monsterKey, name: baseMonster.name, hp: baseMonster.hp * livingPlayers, },
+        monsters: [{ tier: monsterTier, type: monsterKey, name: baseMonster.name, hp: baseMonster.hp * livingPlayers, id: `m_${Date.now()}` }],
         log: {}, players: {}, turn: 1,
     };
     for (const pId in currentLobbyData.players) {
@@ -265,7 +287,7 @@ function performAttack() {
             const result = engine.handleAttack(pData);
             result.logMessages.forEach(logBattleMessage);
             if (result.damageDealt > 0) {
-                const monsterHpRef = ref(db, `lobbies/${currentLobby}/battle/monster/hp`);
+                const monsterHpRef = ref(db, `lobbies/${currentLobby}/battle/monsters/0/hp`);
                 runTransaction(monsterHpRef, (hp) => (hp || 0) - result.damageDealt);
             }
             return result.updatedPlayer;
@@ -282,25 +304,24 @@ function startEnemyTurn() {
         setTimeout(() => {
             const damageUpdates = {};
             const lobbyPlayerUpdates = {};
-            const monster = monsters[battleData.monster.type];
-            for (const pId in battleData.players) {
-                const pData = battleData.players[pId];
-                if (pData.hp > 0) {
-                    if (Math.random() < monster.hitChance) {
-                        const newHp = Math.max(0, pData.hp - monster.attack);
-                        damageUpdates[`/players/${pId}/hp`] = newHp;
-                        lobbyPlayerUpdates[`/players/${pId}/hp`] = newHp;
-                        logBattleMessage(`${monster.name} hits ${pData.name} for ${monster.attack} damage!`);
-                        if (newHp <= 0) {
-                            logBattleMessage(`${pData.name} has been defeated!`);
-                        }
-                    } else {
-                        logBattleMessage(`${monster.name} attacks ${pData.name} but MISSES!`);
-                    }
+            const livingPlayers = Object.entries(battleData.players).filter(([id, data]) => data.hp > 0);
+            if (livingPlayers.length === 0) return;
+            const monster = battleData.monsters[0];
+            const monsterStats = monsters[monster.tier][monster.type];
+            const [targetPlayerId, targetPlayerData] = livingPlayers[Math.floor(Math.random() * livingPlayers.length)];
+            if (Math.random() < monsterStats.hitChance) {
+                const newHp = Math.max(0, targetPlayerData.hp - monsterStats.attack);
+                damageUpdates[`/players/${targetPlayerId}/hp`] = newHp;
+                lobbyPlayerUpdates[`/players/${targetPlayerId}/hp`] = newHp;
+                logBattleMessage(`${monster.name} hits ${targetPlayerData.name} for ${monsterStats.attack} damage!`);
+                if (newHp <= 0) {
+                    logBattleMessage(`${targetPlayerData.name} has been defeated!`);
                 }
+            } else {
+                logBattleMessage(`${monster.name} attacks ${targetPlayerData.name} but MISSES!`);
             }
-            update(lobbyRef, lobbyPlayerUpdates);
-            update(battleRef, damageUpdates);
+            if (Object.keys(lobbyPlayerUpdates).length > 0) update(lobbyRef, lobbyPlayerUpdates);
+            if (Object.keys(damageUpdates).length > 0) update(battleRef, damageUpdates);
             setTimeout(() => {
                 get(battleRef).then(updatedSnapshot => {
                     const updatedBattleData = updatedSnapshot.val();

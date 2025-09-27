@@ -7,9 +7,9 @@ body {
     padding: 20px;
     height: 100vh;
     box-sizing: border-box;
+    overflow: hidden; /* Prevent body scrollbars */
 }
 
-/* Default screen size for menus */
 .screen { 
     display: none; 
     max-width: 1000px; 
@@ -17,17 +17,13 @@ body {
 }
 .screen.active { display: block; }
 
-/* --- THIS IS THE CRITICAL LAYOUT FIX --- */
-/* Make the game screen itself much wider and use flexbox */
 #game-screen.active {
     display: flex;
     flex-direction: column;
     height: 95vh;
-    /* Use a responsive width like 90% of the viewport, with a max of 1600px */
     max-width: 90vw; 
     width: 1600px;
 }
-/* ------------------------------------ */
 
 .hidden { display: none !important; }
 
@@ -42,27 +38,33 @@ hr { border-color: #444; }
 #player-list p { margin: 5px 0; }
 #deck-details, #lobby-deck-details { padding: 15px; margin-top: 10px; background-color: #23272a; border-radius: 5px; text-align: left; }
 
-/* --- MAP STYLING (REVISED) --- */
-#game-screen h2, #game-screen #voting-status {
+
+/* --- MAP STYLING (FOR PAN AND ZOOM) --- */
+#game-screen h2, #game-screen #voting-status, #party-stats-container {
     flex-shrink: 0;
 }
 
 #map-container {
-    overflow-y: auto;
-    overflow-x: auto; /* Allow horizontal scrolling if needed */
     border: 1px solid #444;
     border-radius: 8px;
     flex-grow: 1;
     min-height: 0;
+    overflow: hidden; 
+    position: relative;
+    cursor: grab;
+}
+
+#map-container:active {
+    cursor: grabbing;
 }
 
 #map-nodes {
-    position: relative; 
-    width: 1600px; /* The canvas is now 1600px wide */
+    position: absolute;
+    width: 1600px; 
     height: 1600px; 
-    margin: 0 auto; 
     background-color: #23272a;
-    overflow: hidden;
+    transform-origin: 0 0; 
+    transition: transform 0.1s ease-out;
 }
 
 .node {
@@ -84,7 +86,30 @@ hr { border-color: #444; }
     transform-origin: 0 50%; z-index: 0;
 }
 
-/* --- Battle Styling (Unchanged) --- */
+
+/* --- PARTY STATS ON MAP SCREEN --- */
+#party-stats-container {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    padding: 10px;
+    background-color: #23272a;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+
+.party-member-card {
+    background-color: #40444b;
+    padding: 5px 15px;
+    border-radius: 5px;
+}
+
+.party-member-card h4 { margin: 5px 0; }
+.party-member-card p { margin: 5px 0; font-size: 18px; font-weight: bold; color: #43b581; }
+
+
+/* --- BATTLE STYLING --- */
 #battle-container { display: flex; flex-direction: column; gap: 20px; }
 .battle-header { display: flex; justify-content: space-around; align-items: center; background-color: #23272a; padding: 10px; border-radius: 8px; }
 #phase-indicator { color: #fdd835; }
@@ -101,9 +126,14 @@ hr { border-color: #444; }
 .card::before, .card::after { content: attr(data-value); position: absolute; font-size: 16px; }
 .card::before { top: 5px; left: 8px; }
 .card::after { bottom: 5px; right: 8px; transform: rotate(180deg); }
+
 #end-of-battle-screen { padding: 40px; background-color: #23272a; border-radius: 8px; }
 #end-of-battle-screen h2 { font-size: 3em; }
 
 #game-log-container { background-color: #23272a; border-radius: 8px; padding: 10px 15px; margin-top: 10px; }
 #game-log { height: 100px; overflow-y: auto; text-align: left; font-family: 'Courier New', Courier, monospace; font-size: 14px; padding: 5px; background-color: #2c2f33; border-radius: 4px; }
-#game-log p { margin: 0 0 5px 0; padding-bottom: 5px; border-bottom: 1px solid #444; }
+#game-log p { margin: 0 0 5px 0; padding-bottom: 5px; border-bottom: 1px solid #40444b; }
+
+#monster-area { display: flex; justify-content: center; align-items: center; gap: 15px; flex-grow: 1; }
+.monster-card { background-color: #40444b; border: 2px solid #992d22; border-radius: 8px; padding: 10px; min-width: 150px; transition: all 0.2s ease-in-out; }
+.monster-card.dead { opacity: 0.5; border-color: #555; background-color: #2c2f33; }

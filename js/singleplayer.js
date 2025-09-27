@@ -1,53 +1,53 @@
-// MODIFIED: Added 'monsters' to the import from config.js
 import { decks, monsters } from './config.js';
 import * as ui from './ui.js';
-import { generateNewMap, createDeck, shuffleDeck } from './game-logic.js'; // Import the new function
+import { generateNewMap, createDeck, shuffleDeck } from './game-logic.js';
 import * as engine from './battle-engine.js';
 
 let state = {};
 
 export function start(playerName, deckId) {
     state = {
-        player: {
-            id: 'p1',
-            name: playerName,
-            deckId: deckId,
-            hp: 100,
-            maxHp: 100
-        },
+        player: { id: 'p1', name: playerName, deckId: deckId, hp: 100, maxHp: 100 },
         map: generateNewMap(),
-        gameState: {
-            status: 'map_vote',
-            currentNodeId: null,
-            clearedNodes: []
-        },
+        gameState: { status: 'map_vote', currentNodeId: null, clearedNodes: [0] }, // Start node is pre-cleared
         battle: null,
     };
-
     ui.showGameScreen('map');
     ui.renderMap(state.map, state.gameState, onNodeSelect);
-    
-    ui.elements.defeatContinueBtn.onclick = () => {
-        // The simplest way to reset a single-player game is to reload the page.
-        window.location.reload();
-    };
-
+    ui.updatePartyStats({ [state.player.id]: state.player }); // Initial party stats display
+    ui.elements.defeatContinueBtn.onclick = () => { window.location.reload(); };
 }
 
 function onNodeSelect(nodeId) {
     state.gameState.currentNodeId = nodeId;
-    state.gameState.status = 'battle';
-    initializeBattle();
+    const nodeType = state.map.nodes[nodeId].type;
+
+    switch (nodeType) {
+        case 'Normal Battle':
+        case 'Elite Battle':
+        case 'Boss':
+            // --- THIS IS THE FIX ---
+            // Pass the nodeType to the initializeBattle function
+            initializeBattle(nodeType);
+            break;
+        case 'Rest Site':
+            handleRestSite();
+            break;
+        case 'Shop':
+        case 'Unknown Event':
+            handlePlaceholderNode(nodeType);
+            break;
+    }
 }
 
-// This function will now work correctly
-function initializeBattle() {
+// --- THIS IS THE OTHER PART OF THE FIX ---
+// This function now correctly accepts the nodeType as an argument
+function initializeBattle(nodeType) {
     const myDeckConfig = decks[state.player.deckId];
-    const monsterType = state.gameState.currentNodeId === 'node-boss' ? 'boss' : 'slime';
-    const monsterData = monsters[monsterType];
+    
     state.battle = {
         phase: 'PLAYER_TURN',
-        monster: { ...monsterData },
+        monsters: generateEnemyGroup(nodeType),
         log: [],
         players: {
             [state.player.id]: {
@@ -60,13 +60,32 @@ function initializeBattle() {
         },
         turn: 1,
     };
+    
     ui.showGameScreen('battle');
     ui.setTimerVisibility(false);
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
+    
     ui.elements.chargeBtn.onclick = chargeAttack;
     ui.elements.drawCardBtn.onclick = drawCard;
     ui.elements.attackBtn.onclick = performAttack;
     ui.elements.returnToMapBtn.onclick = returnToMap;
+}
+
+function generateEnemyGroup(nodeType) {
+    let group = [];
+    const now = Date.now();
+    if (nodeType === 'Normal Battle') {
+        const enemyKeys = Object.keys(monsters.normal);
+        const enemyType = enemyKeys[Math.floor(Math.random() * enemyKeys.length)];
+        group.push({ ...monsters.normal[enemyType], id: `m_${now}`, tier: 'normal', type: enemyType });
+    } else if (nodeType === 'Elite Battle') {
+        const enemyKeys = Object.keys(monsters.elite);
+        const enemyType = enemyKeys[Math.floor(Math.random() * enemyKeys.length)];
+        group.push({ ...monsters.elite[enemyType], id: `m_${now}`, tier: 'elite', type: enemyType });
+    } else if (nodeType === 'Boss') {
+        group.push({ ...monsters.boss.nodeGuardian, id: `m_${now}`, tier: 'boss', type: 'nodeGuardian' });
+    }
+    return group;
 }
 
 function logBattleMessage(message) {
@@ -76,12 +95,15 @@ function logBattleMessage(message) {
 function chargeAttack() {
     const myData = state.battle.players[state.player.id];
     if (myData.status !== 'needs_bet') return;
+
     const chargeValue = parseInt(ui.elements.manaInput.value, 10);
     const result = engine.handleCharge(myData, chargeValue);
+
     if (result.error) {
         alert(result.error);
         return;
     }
+
     state.battle.players[state.player.id] = result.updatedPlayer;
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
 }
@@ -90,7 +112,7 @@ function drawCard() {
     const myData = state.battle.players[state.player.id];
     if (myData.status !== 'acting') return;
 
-    myData.status = 'waiting'; // Lock turn
+    myData.status = 'waiting';
     ui.disableActionButtons();
     
     const result = engine.handleDraw(myData);
@@ -110,17 +132,25 @@ function performAttack() {
     const myData = state.battle.players[state.player.id];
     if (myData.status !== 'acting') return;
     
-    myData.status = 'waiting'; // Lock turn
+    myData.status = 'waiting';
     ui.disableActionButtons();
 
+    const livingMonsters = state.battle.monsters.filter(m => m.hp > 0);
+    if (livingMonsters.length === 0) {
+        endBattle('victory');
+        return;
+    }
+    const target = livingMonsters[Math.floor(Math.random() * livingMonsters.length)];
+    
     const result = engine.handleAttack(myData);
     state.battle.players[state.player.id] = result.updatedPlayer;
-    state.battle.monster.hp = Math.max(0, state.battle.monster.hp - result.damageDealt);
+    target.hp = Math.max(0, target.hp - result.damageDealt);
     result.logMessages.forEach(logBattleMessage);
     
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
 
-    if (state.battle.monster.hp <= 0) {
+    const allMonstersDead = state.battle.monsters.every(m => m.hp <= 0);
+    if (allMonstersDead) {
         endBattle('victory');
     } else if (state.battle.players[state.player.id].hp <= 0) {
         endBattle('defeat');
@@ -133,9 +163,17 @@ function startEnemyTurn() {
     state.battle.phase = 'ENEMY_TURN';
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
     
-    setTimeout(() => {
+    const livingMonsters = state.battle.monsters.filter(m => m.hp > 0);
+    let currentMonsterIndex = 0;
+
+    function nextMonsterAttack() {
+        if (currentMonsterIndex >= livingMonsters.length) {
+            startNextPlayerTurn();
+            return;
+        }
+
+        const monster = livingMonsters[currentMonsterIndex];
         const myData = state.battle.players[state.player.id];
-        const monster = state.battle.monster;
         
         if (Math.random() < monster.hitChance) {
             const damage = monster.attack;
@@ -146,18 +184,23 @@ function startEnemyTurn() {
             logBattleMessage(`${monster.name} attacks ${myData.name} but MISSES!`);
         }
 
+        ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
+
         if (myData.hp <= 0) {
             endBattle('defeat');
-        } else {
-            startNextPlayerTurn();
+            return;
         }
-    }, 1500);
+        
+        currentMonsterIndex++;
+        setTimeout(nextMonsterAttack, 1000);
+    }
+    
+    setTimeout(nextMonsterAttack, 500);
 }
 
 function startNextPlayerTurn() {
     const myData = state.battle.players[state.player.id];
     
-    // Set status for the new turn based on the result of the last one.
     if (myData.charge === 0) {
         myData.status = 'needs_bet';
     } else {
@@ -177,8 +220,37 @@ function endBattle(result) {
     ui.showGameScreen('end_battle', result, true);
 }
 
+function handleRestSite() {
+    // --- THIS IS THE FIX: Use state.player, not state.battle.players ---
+    const myData = state.player;
+    const oldHp = myData.hp;
+
+    const result = engine.handleRest(myData);
+    state.player = result.updatedPlayer; // Save the updated player state
+
+    const healedAmount = state.player.hp - oldHp;
+    const healPercent = Math.round((healedAmount / myData.maxHp) * 100);
+
+    alert(
+        `You rest at the campfire.\n` +
+        `Healed for ${healedAmount} HP (${healPercent}%).\n` +
+        `Your HP is now ${state.player.hp} / ${state.player.maxHp}.`
+    );
+
+    returnToMap();
+}
+
+
+function handlePlaceholderNode(nodeType) {
+    alert(`You have arrived at an ${nodeType}. This feature will be implemented soon!`);
+    returnToMap();
+}
+
 function returnToMap() {
+    state.gameState.clearedNodes.push(state.gameState.currentNodeId);
+    state.battle = null;
     state.gameState.status = 'map_vote';
     ui.showGameScreen('map');
     ui.renderMap(state.map, state.gameState, onNodeSelect);
+    ui.updatePartyStats({ [state.player.id]: state.player }); // Update display with new HP
 }

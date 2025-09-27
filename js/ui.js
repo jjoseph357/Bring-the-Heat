@@ -1,5 +1,72 @@
 import { decks, monsters } from './config.js';
 
+class MapInteraction {
+    constructor(viewport, canvas) {
+        this.viewport = viewport;
+        this.canvas = canvas;
+
+        this.scale = 0.5;
+        this.panX = 0;
+        this.panY = 0;
+
+        this.isPanning = false;
+        this.startX = 0;
+        this.startY = 0;
+
+        this.viewport.onwheel = this.onWheel.bind(this);
+        this.viewport.onmousedown = this.onMouseDown.bind(this);
+        this.viewport.onmousemove = this.onMouseMove.bind(this);
+        this.viewport.onmouseup = this.onMouseUp.bind(this);
+        this.viewport.onmouseleave = this.onMouseUp.bind(this); // Stop panning if mouse leaves
+    }
+
+    applyTransform() {
+        this.canvas.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.scale})`;
+    }
+
+    onWheel(event) {
+        event.preventDefault(); // Prevent page from scrolling
+
+        const rect = this.viewport.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+
+        const oldScale = this.scale;
+        const scaleAmount = -event.deltaY * 0.001;
+        this.scale = Math.min(Math.max(0.25, this.scale + scaleAmount), 2); // Clamp zoom
+
+        // Zoom towards the mouse position
+        this.panX = mouseX - (mouseX - this.panX) * (this.scale / oldScale);
+        this.panY = mouseY - (mouseY - this.panY) * (this.scale / oldScale);
+
+        this.applyTransform();
+    }
+
+    onMouseDown(event) {
+        this.isPanning = true;
+        this.startX = event.clientX - this.panX;
+        this.startY = event.clientY - this.panY;
+    }
+
+    onMouseMove(event) {
+        if (!this.isPanning) return;
+        this.panX = event.clientX - this.startX;
+        this.panY = event.clientY - this.startY;
+        this.applyTransform();
+    }
+
+    onMouseUp() {
+        this.isPanning = false;
+    }
+
+    // A function to center and zoom the map on a specific node (like the start)
+    centerOn(x, y) {
+        this.panX = (this.viewport.clientWidth / 2) - (x * this.scale);
+        this.panY = (this.viewport.clientHeight / 2) - (y * this.scale);
+        this.applyTransform();
+    }
+}
+
 // Centralized DOM element references
 export const elements = {
     // Screens
@@ -48,7 +115,10 @@ export const elements = {
     returnToMapBtn: document.getElementById('return-to-map-btn'),
     defeatContinueBtn: document.getElementById('defeat-continue-btn'),
     gameLog: document.getElementById('game-log'),
+    partyStatsContainer: document.getElementById('party-stats-container'), // ADD THIS
 };
+
+let mapInteractionHandler = null;
 
 export function showScreen(screenElement) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -69,12 +139,43 @@ export function disableActionButtons() {
     elements.attackBtn.disabled = true;
 }
 
+export function updatePartyStats(players) {
+    const container = elements.partyStatsContainer;
+    container.innerHTML = '';
+    for (const pId in players) {
+        const pData = players[pId];
+        const card = document.createElement('div');
+        card.className = 'party-member-card';
+        card.innerHTML = `
+            <h4>${pData.name}</h4>
+            <p>HP: ${pData.hp} / ${pData.maxHp || 100}</p>
+        `;
+        container.appendChild(card);
+    }
+}
+
 export function updateBattleUI(battleData, myPlayerId, myDeckId) {
     const deckConfig = myDeckId ? decks[myDeckId] : null;
-    elements.monsterName.textContent = battleData.monster.name || "A Monster";
-    elements.monsterHp.textContent = battleData.monster.hp;
+    
+    // --- REVISED: Render multiple monster cards ---
+    const monsterArea = document.getElementById('monster-area');
+    monsterArea.innerHTML = ''; // Clear previous monsters
+    battleData.monsters.forEach(monster => {
+        const card = document.createElement('div');
+        card.className = 'monster-card';
+        if (monster.hp <= 0) {
+            card.classList.add('dead');
+        }
+        card.innerHTML = `
+            <h4>${monster.name}</h4>
+            <p>HP: ${monster.hp}</p>
+        `;
+        monsterArea.appendChild(card);
+    });
+    // ---------------------------------------------
     
     elements.phaseTitle.textContent = battleData.phase.replace('_', ' ');
+
     elements.playerJackpot.textContent = deckConfig?.jackpot || 'N/A';
 
     const playerArea = elements.playerBattleArea;
@@ -158,10 +259,15 @@ export function showGameScreen(mode, result, isHost) {
     elements.mapContainer.classList.add('hidden');
     elements.battleContainer.classList.add('hidden');
     elements.endOfBattleScreen.classList.add('hidden');
+    elements.partyStatsContainer.style.display = 'none'; // Hide by default
 
-    if (mode === 'map') elements.mapContainer.classList.remove('hidden');
+    if (mode === 'map') {
+        elements.mapContainer.classList.remove('hidden');
+        elements.partyStatsContainer.style.display = 'flex'; // Show on map screen
+    }
     if (mode === 'battle') elements.battleContainer.classList.remove('hidden');
     if (mode === 'end_battle') {
+
         const titleEl = document.getElementById('battle-result-title');
         const textEl = document.getElementById('battle-result-text');
         
@@ -181,32 +287,29 @@ export function showGameScreen(mode, result, isHost) {
 }
 
 export function renderMap(mapData, gameState, onNodeClick) {
-    elements.mapNodes.innerHTML = '';
+    const mapContainer = document.getElementById('map-container');
+    const mapNodes = elements.mapNodes;
+    
+    // Initialize the pan/zoom handler if it doesn't exist
+    if (!mapInteractionHandler) {
+        mapInteractionHandler = new MapInteraction(mapContainer, mapNodes);
+    }
+
+    mapNodes.innerHTML = ''; // Clear previous map
     const nodeElements = {};
 
-    // --- NEW: Normalization and Scaling Logic ---
-    const allNodes = Object.values(mapData.nodes);
-    if (allNodes.length === 0) return;
-
-    // These are the logical dimensions from game-logic.js
-    const logicalWidth = 25;
+    const logicalWidth = 25; 
     const logicalHeight = 40;
+    const canvasWidth = mapNodes.clientWidth;
+    const canvasHeight = mapNodes.clientHeight;
+    const padding = 100;
 
-    const mapWidth = elements.mapNodes.clientWidth;
-    const mapHeight = elements.mapNodes.clientHeight;
-    const padding = 80;
-
-    // --- THIS IS THE CRITICAL FIX ---
-    // We now scale based on the full logical plane, not the bounding box of the points.
-    // This forces the nodes to fill the entire container width.
-    const scaleX = (mapWidth - padding * 2) / logicalWidth;
-    const scaleY = (mapHeight - padding * 2) / logicalHeight;
-    // ---------------------------------------------
+    const scaleX = (canvasWidth - padding * 2) / logicalWidth;
+    const scaleY = (canvasHeight - padding * 2) / logicalHeight;
 
     const transformPoint = (pos) => {
-        // We flip the Y-axis calculation to make the map render from bottom to top
         const x = (pos.x * scaleX) + padding;
-        const y = (mapHeight - (pos.y * scaleY)) - padding;
+        const y = (canvasHeight - (pos.y * scaleY)) - padding;
         return { x, y };
     };
 
@@ -217,48 +320,59 @@ export function renderMap(mapData, gameState, onNodeClick) {
         if (fromNode && toNode) {
             const p1 = transformPoint(fromNode.pos);
             const p2 = transformPoint(toNode.pos);
+            
             const line = document.createElement('div');
             line.className = 'node-line';
             const length = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
             const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+            
             line.style.width = `${length}px`;
             line.style.transform = `rotate(${angle}deg)`;
             line.style.left = `${p1.x}px`;
             line.style.top = `${p1.y}px`;
-            elements.mapNodes.appendChild(line);
+            mapNodes.appendChild(line);
         }
     });
 
     // Draw nodes on top of lines
-    allNodes.forEach(node => {
+    Object.values(mapData.nodes).forEach(node => {
         const screenPos = transformPoint(node.pos);
         const nodeEl = document.createElement('div');
         nodeEl.className = 'node';
         nodeEl.id = `map-node-${node.id}`;
         nodeEl.textContent = node.type;
+        
         nodeEl.style.left = `${screenPos.x}px`;
         nodeEl.style.top = `${screenPos.y}px`;
+
         if (gameState.clearedNodes?.includes(node.id)) nodeEl.classList.add('cleared');
         if (gameState.currentNodeId === node.id) nodeEl.classList.add('current');
-        elements.mapNodes.appendChild(nodeEl);
+        
+        mapNodes.appendChild(nodeEl);
         nodeElements[node.id] = nodeEl;
     });
 
+    // Votable logic
     const votableNodeIds = determineVotableNodes(mapData, gameState);
     votableNodeIds.forEach(nodeId => {
         const nodeEl = nodeElements[nodeId];
         if (nodeEl) {
             nodeEl.classList.add('votable');
-            nodeEl.onclick = () => onNodeClick(nodeId);
+            nodeEl.onclick = (event) => {
+                event.stopPropagation(); // Prevent click from triggering a pan
+                onNodeClick(nodeId);
+            };
         }
     });
     
     elements.votingStatus.textContent = votableNodeIds.length > 0 ? "Choose your next destination." : gameState.clearedNodes?.includes(1) ? "Congratulations! You defeated the boss!" : "Battle in progress...";
 
-    // --- NEW: Auto-scroll to the bottom on initial render ---
-    const mapContainer = document.getElementById('map-container');
-    if (mapContainer) {
-        mapContainer.scrollTop = mapContainer.scrollHeight;
+    // Auto-center the view on the last cleared node
+    const lastClearedNodeId = gameState.clearedNodes?.[gameState.clearedNodes.length - 1] ?? 0;
+    const focusNode = mapData.nodes[lastClearedNodeId];
+    if (focusNode) {
+        const focusPos = transformPoint(focusNode.pos);
+        mapInteractionHandler.centerOn(focusPos.x, focusPos.y);
     }
 }
 

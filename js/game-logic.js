@@ -44,14 +44,33 @@ export function generateNewMap() {
     }
     Object.values(graph.nodes).forEach(node => node.disabled = false);
 
+    // --- Final Step: Structure and assign types to the map data ---
     const finalMap = { nodes: {}, connections: [] };
-    const allPathNodes = new Set(paths.flat());
+    const allPathNodeIds = Array.from(new Set(paths.flat()));
 
-    allPathNodes.forEach(id => {
+    allPathNodeIds.forEach(id => {
         finalMap.nodes[id] = { id: id, pos: points[id], type: NODE_TYPES.NORMAL };
     });
+
     finalMap.nodes[0].type = 'Start';
     finalMap.nodes[1].type = NODE_TYPES.BOSS;
+
+    // --- NEW: Randomly assign special node types ---
+    // Get all nodes that are not the start or boss
+    const availableNodes = allPathNodeIds.filter(id => id !== 0 && id !== 1);
+    const specialTypes = [NODE_TYPES.ELITE, NODE_TYPES.SHOP, NODE_TYPES.REST, NODE_TYPES.EVENT];
+    
+    // Assign one of each special type to a random available node
+    specialTypes.forEach(type => {
+        if (availableNodes.length > 0) {
+            const randomIndex = Math.floor(Math.random() * availableNodes.length);
+            const nodeIdToAssign = availableNodes[randomIndex];
+            finalMap.nodes[nodeIdToAssign].type = type;
+            // Remove the node from the available pool so it doesn't get assigned twice
+            availableNodes.splice(randomIndex, 1);
+        }
+    });
+
 
     // --- THIS IS THE CRITICAL FIX FOR UNREACHABLE NODES ---
     // The previous filter was too strict and removed valid connections.

@@ -53,16 +53,22 @@
         <!-- THIS STRUCTURE IS REVISED -->
         <h2>The Expedition Map</h2>
         <p id="voting-status"></p>        <!-- Map View -->
+        <!-- THIS CONTAINER IS NEW -->
+        <div id="party-stats-container">
+            <!-- Party member stats will be added here by JavaScript -->
+        </div>
+        
+        <!-- The map container is now just for the scrollable map itself -->
         <div id="map-container">
             <div id="map-nodes"></div>
         </div>
+
         
         <!-- Battle View -->
         <div id="battle-container" class="hidden">
             <div class="battle-header">
-                <div id="monster-info">
-                    <h3><span id="monster-name">Vicious Slime</span></h3>
-                    <p>HP: <span id="monster-hp">100</span></p>
+                <div id="monster-area">
+                    <!-- Monster cards will be dynamically added here -->
                 </div>
                 <div id="phase-indicator">
                     <h2 id="phase-title">Waiting...</h2>

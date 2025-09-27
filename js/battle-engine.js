@@ -67,3 +67,10 @@ export function handleAttack(pData) {
 
     return { updatedPlayer: pData, damageDealt: damage, logMessages };
 }
+
+export function handleRest(pData) {
+    const healAmount = Math.floor((Math.random() * 0.10 + 0.15) * pData.maxHp); // 15% to 25%
+    pData.hp = Math.min(pData.maxHp, pData.hp + healAmount);
+    const logMessage = `${pData.name} rests and recovers ${healAmount} HP.`;
+    return { updatedPlayer: pData, logMessage };
+}
