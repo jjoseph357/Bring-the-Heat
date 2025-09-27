@@ -72,3 +72,10 @@ hr { border-color: #444; }
     padding-bottom: 5px;
     border-bottom: 1px solid #40444b;
 }
+
+/* ADD THIS CLASS AT THE END */
+.player-battle-info.dead {
+    background-color: #2c2f33;
+    opacity: 0.6;
+    border-left-color: #992d22;
+}

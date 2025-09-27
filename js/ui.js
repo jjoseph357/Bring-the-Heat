@@ -1,6 +1,6 @@
-import { decks } from './config.js';
+import { decks, monsters } from './config.js';
 
-// Centralized DOM element references - NOW COMPLETE
+// Centralized DOM element references
 export const elements = {
     // Screens
     mainMenu: document.getElementById('main-menu'),
@@ -29,25 +29,23 @@ export const elements = {
 
     // Battle
     monsterHp: document.getElementById('monster-hp'),
+    monsterName: document.getElementById('monster-name'),
     phaseTitle: document.getElementById('phase-title'),
     turnTimer: document.getElementById('turn-timer'),
     timerContainer: document.getElementById('timer-container'),
     playerBattleArea: document.getElementById('player-battle-area'),
-    
-    // --- THIS SECTION IS NOW COMPLETE ---
-    playerMoney: document.getElementById('player-money'),
+    playerMana: document.getElementById('player-mana'),
     playerJackpot: document.getElementById('player-jackpot'),
     playerSum: document.getElementById('player-sum'),
     playerMultiplier: document.getElementById('player-multiplier'),
-    
     playerHandContainer: document.getElementById('player-hand-container'),
-    betInput: document.getElementById('bet-input'),
-    placeBetBtn: document.getElementById('place-bet-btn'),
+    manaInput: document.getElementById('mana-input'),
+    chargeBtn: document.getElementById('charge-btn'),
     drawCardBtn: document.getElementById('draw-card-btn'),
     attackBtn: document.getElementById('attack-btn'),
     returnToMapBtn: document.getElementById('return-to-map-btn'),
-    gameLog: document.getElementById('game-log'), // ADD THIS
-
+    defeatContinueBtn: document.getElementById('defeat-continue-btn'),
+    gameLog: document.getElementById('game-log'),
 };
 
 export function showScreen(screenElement) {
@@ -62,6 +60,122 @@ export function updateDeckDetails() {
         <p><strong>Jackpot:</strong> ${selectedDeck.jackpot}</p>
         <ul>${cardList}</ul>
     `;
+}
+
+export function disableActionButtons() {
+    elements.drawCardBtn.disabled = true;
+    elements.attackBtn.disabled = true;
+}
+
+export function updateBattleUI(battleData, myPlayerId, myDeckId) {
+    const deckConfig = myDeckId ? decks[myDeckId] : null;
+    elements.monsterName.textContent = battleData.monster.name || "A Monster";
+    elements.monsterHp.textContent = battleData.monster.hp;
+    
+    elements.phaseTitle.textContent = battleData.phase.replace('_', ' ');
+    elements.playerJackpot.textContent = deckConfig?.jackpot || 'N/A';
+
+    const playerArea = elements.playerBattleArea;
+    playerArea.innerHTML = '';
+    for (const pId in battleData.players) {
+        const pData = battleData.players[pId];
+        const playerCard = document.createElement('div');
+        playerCard.className = 'player-battle-info';
+        if (pId === myPlayerId) playerCard.classList.add('is-self');
+        
+        if (pData.hp <= 0) {
+            playerCard.classList.add('dead');
+            pData.status = 'dead';
+        }
+
+        playerCard.innerHTML = `
+            <h4>${pData.name}</h4>
+            <p>HP: ${pData.hp} / ${pData.maxHp}</p>
+            <p>Status: ${pData.status || 'N/A'}</p>
+            <p>Charge: ${pData.charge || 0}</p>
+            <p>Sum: ${pData.sum || 0}</p>
+        `;
+        playerArea.appendChild(playerCard);
+    }
+
+    const myData = battleData.players[myPlayerId];
+    if (!myData || myData.hp <= 0) {
+        elements.manaInput.style.display = 'none';
+        elements.chargeBtn.style.display = 'none';
+        elements.drawCardBtn.style.display = 'none';
+        elements.attackBtn.style.display = 'none';
+        elements.playerMana.textContent = "0";
+        elements.playerSum.textContent = "0";
+        elements.playerMultiplier.textContent = "0.00";
+        elements.playerHandContainer.innerHTML = '';
+        return;
+    };
+
+    elements.playerMana.textContent = Math.floor(myData.mana);
+    elements.playerSum.textContent = myData.sum;
+    const multiplier = myData.sum > 0 && deckConfig ? deckConfig.g(myData.sum).toFixed(2) : '0.00';
+    elements.playerMultiplier.textContent = multiplier;
+
+    const handContainer = elements.playerHandContainer;
+    handContainer.innerHTML = '';
+    myData.hand?.forEach(cardValue => displayCard(cardValue, handContainer));
+
+    const canBet = battleData.phase === 'PLAYER_TURN' && myData.status === 'needs_bet';
+    const canAct = battleData.phase === 'PLAYER_TURN' && myData.status === 'acting';
+    
+    elements.manaInput.style.display = canBet ? 'inline-block' : 'none';
+    elements.chargeBtn.style.display = canBet ? 'inline-block' : 'none';
+    elements.drawCardBtn.style.display = canAct ? 'inline-block' : 'none';
+    elements.attackBtn.style.display = canAct ? 'inline-block' : 'none';
+    elements.drawCardBtn.disabled = !canAct;
+    elements.attackBtn.disabled = !canAct;
+
+    elements.gameLog.innerHTML = '';
+    if (battleData.log) {
+        const messages = Object.values(battleData.log).slice(-5);
+        messages.forEach(logEntry => {
+            const p = document.createElement('p');
+            p.textContent = logEntry.message;
+            elements.gameLog.appendChild(p);
+        });
+        elements.gameLog.scrollTop = elements.gameLog.scrollHeight;
+    }
+}
+
+
+function displayCard(value, container) {
+    const cardEl = document.createElement('div');
+    cardEl.className = 'card';
+    cardEl.textContent = value;
+    cardEl.dataset.value = value;
+    container.appendChild(cardEl);
+}
+
+export function showGameScreen(mode, result, isHost) {
+    showScreen(elements.gameScreen);
+    elements.mapContainer.classList.add('hidden');
+    elements.battleContainer.classList.add('hidden');
+    elements.endOfBattleScreen.classList.add('hidden');
+
+    if (mode === 'map') elements.mapContainer.classList.remove('hidden');
+    if (mode === 'battle') elements.battleContainer.classList.remove('hidden');
+    if (mode === 'end_battle') {
+        const titleEl = document.getElementById('battle-result-title');
+        const textEl = document.getElementById('battle-result-text');
+        
+        if (result === 'victory') {
+            titleEl.textContent = 'Victory!';
+            textEl.textContent = 'The monster has been vanquished.';
+            elements.returnToMapBtn.style.display = isHost ? 'block' : 'none';
+            elements.defeatContinueBtn.style.display = 'none';
+        } else { // defeat
+            titleEl.textContent = 'Defeat!';
+            textEl.textContent = 'Your party has fallen. The expedition is over.';
+            elements.returnToMapBtn.style.display = 'none';
+            elements.defeatContinueBtn.style.display = isHost ? 'block' : 'none';
+        }
+        elements.endOfBattleScreen.classList.remove('hidden');
+    }
 }
 
 export function renderMap(mapData, gameState, onNodeClick) {
@@ -109,103 +223,6 @@ function determineVotableNodes(mapData, gameState) {
         .filter(nodeId => !gameState.clearedNodes?.includes(nodeId));
 }
 
-export function disableActionButtons() {
-    elements.drawCardBtn.disabled = true;
-    elements.attackBtn.disabled = true;
-}
-
-export function updateBattleUI(battleData, myPlayerId, myDeckId) {
-    const deckConfig = decks[myDeckId];
-    elements.monsterHp.textContent = battleData.monster.hp;
-    elements.phaseTitle.textContent = battleData.phase.replace('_', ' ');
-    elements.playerJackpot.textContent = deckConfig.jackpot;
-
-    const playerArea = elements.playerBattleArea;
-    playerArea.innerHTML = '';
-    for (const pId in battleData.players) {
-        const pData = battleData.players[pId];
-        const playerCard = document.createElement('div');
-        playerCard.className = 'player-battle-info';
-        if (pId === myPlayerId) playerCard.classList.add('is-self');
-        playerCard.innerHTML = `
-            <h4>${pData.name}</h4>
-            <p>HP: ${pData.hp} / ${pData.maxHp}</p>
-            <p>Status: ${pData.status || 'N/A'}</p>
-            <p>Bet: $${pData.bet || 0}</p>
-            <p>Sum: ${pData.sum || 0}</p>
-        `;
-        playerArea.appendChild(playerCard);
-    }
-
-    const myData = battleData.players[myPlayerId];
-    if (!myData) return;
-
-    elements.playerMoney.textContent = Math.floor(myData.money); // Round money for display
-    elements.playerSum.textContent = myData.sum;
-    const multiplier = myData.sum > 0 ? deckConfig.g(myData.sum).toFixed(2) : '1.00';
-    elements.playerMultiplier.textContent = multiplier;
-
-    const handContainer = elements.playerHandContainer;
-    handContainer.innerHTML = '';
-    myData.hand?.forEach(cardValue => displayCard(cardValue, handContainer));
-
-    // REVISED button logic for bet persistence
-    const canBet = battleData.phase === 'PLAYER_TURN' && myData.status === 'needs_bet';
-    const canAct = battleData.phase === 'PLAYER_TURN' && myData.status === 'acting';
-    
-    elements.betInput.style.display = canBet ? 'inline-block' : 'none';
-    elements.placeBetBtn.style.display = canBet ? 'inline-block' : 'none';
-
-    elements.gameLog.innerHTML = '';
-    if (battleData.log) {
-        // Get the last 5 messages from the log object
-        const messages = Object.values(battleData.log).slice(-5);
-        messages.forEach(logEntry => {
-            const p = document.createElement('p');
-            p.textContent = logEntry.message;
-            elements.gameLog.appendChild(p);
-        });
-        // Auto-scroll to the bottom
-        elements.gameLog.scrollTop = elements.gameLog.scrollHeight;
-    }
-
-
-    // MODIFICATION: Explicitly enable/disable the buttons based on state
-    elements.drawCardBtn.style.display = canAct ? 'inline-block' : 'none';
-    elements.attackBtn.style.display = canAct ? 'inline-block' : 'none';
-    elements.drawCardBtn.disabled = !canAct;
-    elements.attackBtn.disabled = !canAct;
-}
-
-
-
-function displayCard(value, container) {
-    const cardEl = document.createElement('div');
-    cardEl.className = 'card';
-    cardEl.textContent = value;
-    cardEl.dataset.value = value;
-    container.appendChild(cardEl);
-}
-
-export function showGameScreen(mode, result, isHost) {
-    showScreen(elements.gameScreen);
-    elements.mapContainer.classList.add('hidden');
-    elements.battleContainer.classList.add('hidden');
-    elements.endOfBattleScreen.classList.add('hidden');
-
-    if (mode === 'map') elements.mapContainer.classList.remove('hidden');
-    if (mode === 'battle') elements.battleContainer.classList.remove('hidden');
-    if (mode === 'end_battle') {
-        document.getElementById('battle-result-title').textContent = result === 'victory' ? 'Victory!' : 'Defeat!';
-        document.getElementById('battle-result-text').textContent = result === 'victory' ? 'The monster has been vanquished.' : 'Your party has fallen.';
-        elements.returnToMapBtn.style.display = isHost ? 'block' : 'none';
-        elements.endOfBattleScreen.classList.remove('hidden');
-    }
-}
-
-// --- TIMER LOGIC ---
-
-// MODIFIED to use the new reliable element
 export function setTimerVisibility(visible) {
     elements.timerContainer.style.display = visible ? 'block' : 'none';
 }

@@ -2,6 +2,7 @@
 import { decks, monsters } from './config.js';
 import * as ui from './ui.js';
 import { generateMap, createDeck, shuffleDeck } from './game-logic.js';
+import * as engine from './battle-engine.js'; // Import the new engine
 
 let state = {};
 
@@ -25,6 +26,12 @@ export function start(playerName, deckId) {
 
     ui.showGameScreen('map');
     ui.renderMap(state.map, state.gameState, onNodeSelect);
+    
+    ui.elements.defeatContinueBtn.onclick = () => {
+        // The simplest way to reset a single-player game is to reload the page.
+        window.location.reload();
+    };
+
 }
 
 function onNodeSelect(nodeId) {
@@ -42,12 +49,13 @@ function initializeBattle() {
     state.battle = {
         phase: 'PLAYER_TURN',
         monster: { ...monsterData },
-        log: [], // Use a simple array for single player log
+        log: [],
         players: {
             [state.player.id]: {
                 name: state.player.name, hp: state.player.hp, maxHp: state.player.maxHp,
-                money: 100, deck: shuffleDeck(createDeck(myDeckConfig)),
-                hand: [], sum: 0, bet: 0,
+                mana: 20, deck: shuffleDeck(createDeck(myDeckConfig)),
+                deckId: state.player.deckId, // Pass deckId to the battle state
+                hand: [], sum: 0, charge: 0,
                 status: 'needs_bet',
             }
         },
@@ -58,7 +66,7 @@ function initializeBattle() {
     ui.setTimerVisibility(false);
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
     
-    ui.elements.placeBetBtn.onclick = placeBet;
+    ui.elements.chargeBtn.onclick = chargeAttack;
     ui.elements.drawCardBtn.onclick = drawCard;
     ui.elements.attackBtn.onclick = performAttack;
     ui.elements.returnToMapBtn.onclick = returnToMap;
@@ -68,20 +76,19 @@ function logBattleMessage(message) {
     state.battle.log.push({ message });
 }
 
-function placeBet() {
+function chargeAttack() {
     const myData = state.battle.players[state.player.id];
     if (myData.status !== 'needs_bet') return;
 
-    const betValue = parseInt(ui.elements.betInput.value, 10);
-    if (isNaN(betValue) || betValue < 0 || betValue > myData.money) {
-        alert('Invalid bet amount.');
+    const chargeValue = parseInt(ui.elements.manaInput.value, 10);
+    const result = engine.handleCharge(myData, chargeValue);
+
+    if (result.error) {
+        alert(result.error);
         return;
     }
-    
-    myData.bet = betValue;
-    myData.money -= betValue;
-    myData.status = 'acting';
 
+    state.battle.players[state.player.id] = result.updatedPlayer;
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
 }
 
@@ -92,29 +99,15 @@ function drawCard() {
     myData.status = 'waiting';
     ui.disableActionButtons();
     
-    if (myData.deck.length === 0) {
-        myData.deck = shuffleDeck(createDeck(decks[state.player.deckId]));
-    }
-    
-    const drawnCard = myData.deck.pop();
-    myData.hand.push(drawnCard);
-    myData.sum += drawnCard;
-    
+    const result = engine.handleDraw(myData);
+    state.battle.players[state.player.id] = result.updatedPlayer;
+    result.logMessages.forEach(logBattleMessage);
+
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
 
-    const deckConfig = decks[state.player.deckId];
-    if (myData.sum > deckConfig.jackpot) {
-        alert("BUST!");
-        logBattleMessage(`${myData.name} busted!`);
-        setTimeout(() => {
-            myData.status = 'needs_bet';
-            myData.hand = [];
-            myData.sum = 0;
-            myData.bet = 0;
-            startEnemyTurn();
-        }, 1500); 
+    if (state.battle.players[state.player.id].hp <= 0) {
+        setTimeout(() => endBattle('defeat'), 1500);
     } else {
-        logBattleMessage(`${myData.name} drew a card.`);
         setTimeout(startEnemyTurn, 1000);
     }
 }
@@ -126,24 +119,17 @@ function performAttack() {
     myData.status = 'waiting';
     ui.disableActionButtons();
 
-    const deckConfig = decks[state.player.deckId];
-    const winnings = myData.bet * deckConfig.g(myData.sum);
-    const damage = Math.floor(winnings);
-    
-    logBattleMessage(`${myData.name} attacks for ${damage} damage!`);
-    
-    state.battle.monster.hp = Math.max(0, state.battle.monster.hp - damage);
-    
-    myData.money = Math.floor(myData.money + winnings);
-    myData.status = 'needs_bet';
-    myData.hand = [];
-    myData.sum = 0;
-    myData.bet = 0;
+    const result = engine.handleAttack(myData);
+    state.battle.players[state.player.id] = result.updatedPlayer;
+    state.battle.monster.hp = Math.max(0, state.battle.monster.hp - result.damageDealt);
+    result.logMessages.forEach(logBattleMessage);
     
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
 
     if (state.battle.monster.hp <= 0) {
         endBattle('victory');
+    } else if (state.battle.players[state.player.id].hp <= 0) {
+        endBattle('defeat');
     } else {
         setTimeout(startEnemyTurn, 1000);
     }

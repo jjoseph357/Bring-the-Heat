@@ -51,7 +51,7 @@
         <div id="battle-container" class="hidden">
             <div class="battle-header">
                 <div id="monster-info">
-                    <h3 id="monster-name">Vicious Slime</h3>
+                    <h3><span id="monster-name">Vicious Slime</span></h3>
                     <p>HP: <span id="monster-hp">100</span></p>
                 </div>
                 <div id="phase-indicator">
@@ -62,16 +62,15 @@
             <div id="player-battle-area"></div>
             <div id="player-action-area">
                 <div id="player-personal-stats">
-                    <p>My Money: $<span id="player-money">100</span></p>
-                    <!-- ADDED THIS LINE -->
-                    <p>Jackpot Target: <span id="player-jackpot">21</span></p>
-                    <p>My Sum: <span id="player-sum">0</span></p>
+                    <p>Mana: <span id="player-mana">100</span></p>
+                    <p>Target: <span id="player-jackpot">21</span></p>
+                    <p>Sum: <span id="player-sum">0</span></p>
                     <p>Multiplier: <span id="player-multiplier">1.00</span>x</p>
                 </div>
                 <div id="player-hand-container"></div>
                 <div id="game-controls">
-                    <input type="number" id="bet-input" placeholder="Enter Bet">
-                    <button id="place-bet-btn">Place Bet</button>
+                    <input type="number" id="mana-input" placeholder="Mana Investment">
+                    <button id="charge-btn">Charge Attack</button>
                     <button id="draw-card-btn">Draw Card</button>
                     <button id="attack-btn">Attack</button>
                 </div>
@@ -88,6 +87,8 @@
             <h2 id="battle-result-title">Victory!</h2>
             <p id="battle-result-text">You defeated the monster!</p>
             <button id="return-to-map-btn">Return to Map</button>
+            <button id="defeat-continue-btn">Continue</button>
+
         </div>
     </div>
 

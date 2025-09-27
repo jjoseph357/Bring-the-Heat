@@ -1,6 +1,7 @@
 import { decks, monsters } from './config.js';
 import * as ui from './ui.js';
 import { generateMap, createDeck, shuffleDeck } from './game-logic.js';
+import * as engine from './battle-engine.js'; // Import the new engine
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
 import { getDatabase, ref, set, onValue, get, child, update, remove, runTransaction, push } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
@@ -17,10 +18,28 @@ export function init(firebaseConfig, playerName, deckId) {
     ui.elements.createLobbyBtn.onclick = createLobby;
     ui.elements.joinLobbyBtn.onclick = joinLobby;
     ui.elements.startGameBtn.onclick = () => isHost && set(ref(db, `lobbies/${currentLobby}/gameState/status`), 'map_vote');
-    ui.elements.placeBetBtn.onclick = placeBet;
+    ui.elements.chargeBtn.onclick = chargeAttack;
     ui.elements.drawCardBtn.onclick = drawCard;
     ui.elements.attackBtn.onclick = performAttack;
     ui.elements.returnToMapBtn.onclick = () => isHost && returnToMap();
+    ui.elements.defeatContinueBtn.onclick = () => {
+        if (isHost) {
+            // The host is responsible for resetting the entire game state.
+            const updates = {
+                '/battle': null,
+                '/map': null,
+                '/votes': null,
+                '/gameState/status': 'lobby', // Set status back to lobby
+            };
+            // Also reset every player's HP back to 100 for the next run.
+            Object.keys(lobbyData.players).forEach(pId => {
+                updates[`/players/${pId}/hp`] = 100;
+            });
+            update(lobbyRef, updates);
+        }
+        // Non-hosts do nothing; they will be sent to the lobby by the listener.
+    };
+
 }
 
 function createLobby() {
@@ -64,9 +83,19 @@ function listenToLobbyChanges() {
         
         lobbyData = snapshot.val();
         const gameState = lobbyData.gameState;
-        const battleData = lobbyData.battle;
-
+        
         updatePlayerList(lobbyData.players);
+
+        // --- NEW: Allow deck changes in the lobby ---
+        const deckSelect = ui.elements.deckSelect;
+        deckSelect.onchange = () => {
+            if (lobbyData.gameState.status === 'lobby') {
+                const playerRef = ref(db, `lobbies/${currentLobby}/players/${currentPlayerId}/deck`);
+                set(playerRef, deckSelect.value);
+                ui.showScreen(ui.elements.multiplayerLobby);
+                updatePlayerList(lobbyData.players); // Update the player list
+            }
+        };
 
         if (isHost && hostTurnTimer) {
             clearInterval(hostTurnTimer);
@@ -139,9 +168,11 @@ function updatePlayerList(players) {
     ui.elements.playerList.innerHTML = '';
     for (const pId in players) {
         const player = players[pId];
-        ui.elements.playerList.innerHTML += `<p>${player.name} (Deck: ${decks[player.deck].name})</p>`;
+        const deckName = decks[player.deck]?.name || 'Unknown Deck';
+        ui.elements.playerList.innerHTML += `<p>${player.name} (Deck: ${deckName})</p>`;
     }
 }
+
 
 function castVote(nodeId) {
     const voteRef = ref(db, `lobbies/${currentLobby}/votes/${currentPlayerId}`);
@@ -163,10 +194,19 @@ function performTally(votes) {
 
 function createBattleState(nodeId, currentLobbyData) {
     const monsterType = nodeId === 'node-boss' ? 'boss' : Object.keys(monsters).filter(m => m !== 'boss')[Math.floor(Math.random() * 2)];
+    const baseMonster = monsters[monsterType];
+    const livingPlayers = Object.values(currentLobbyData.players).filter(p => p.hp > 0).length;
+
     const battleState = {
         phase: 'PLAYER_TURN',
         phaseEndTime: Date.now() + 25000,
-        monster: { type: monsterType, hp: monsters[monsterType].hp },
+        // --- FIX: Store name and scaled HP ---
+        monster: { 
+            type: monsterType, 
+            name: baseMonster.name,
+            hp: baseMonster.hp * livingPlayers, // Scale HP
+        },
+        // ------------------------------------
         log: {}, players: {}, turn: 1,
     };
     for (const pId in currentLobbyData.players) {
@@ -174,10 +214,10 @@ function createBattleState(nodeId, currentLobbyData) {
         if (player.hp > 0) {
             const deckConfig = decks[player.deck];
             battleState.players[pId] = {
-                name: player.name, hp: player.hp, maxHp: 100, money: 100,
+                name: player.name, hp: player.hp, maxHp: 100, mana: 20, // Start with 20 mana
                 deck: shuffleDeck(createDeck(deckConfig)),
                 deckId: player.deck,
-                hand: [], sum: 0, bet: 0, status: 'needs_bet',
+                hand: [], sum: 0, charge: 0, status: 'needs_bet', 
             };
         }
     }
@@ -206,79 +246,62 @@ function forceEndTurn(battleData) {
 }
 
 // placeBet is now correct.
-function placeBet() {
-    const betValue = parseInt(ui.elements.betInput.value, 10);
+function chargeAttack() {
+    const chargeValue = parseInt(ui.elements.manaInput.value, 10);
     const playerBattleRef = ref(db, `lobbies/${currentLobby}/battle/players/${currentPlayerId}`);
     runTransaction(playerBattleRef, (pData) => {
-        if (pData && pData.status === 'needs_bet') {
-            if (isNaN(betValue) || betValue < 0 || betValue > pData.money) { return; }
-            pData.bet = betValue;
-            pData.money -= betValue;
-            pData.status = 'acting';
+        if (pData && pData.hp > 0 && pData.status === 'needs_bet') {
+            const result = engine.handleCharge(pData, chargeValue);
+            return result.updatedPlayer || pData; // Return updated data or original on error
         }
         return pData;
     });
 }
 
-// drawCard is now correct.
 function drawCard() {
     const playerRef = ref(db, `lobbies/${currentLobby}/battle/players/${currentPlayerId}`);
     runTransaction(playerRef, (pData) => {
-        if (pData && pData.status === 'acting') {
-            pData.status = 'waiting';
-            if (!pData.deck || pData.deck.length === 0) {
-                pData.deck = shuffleDeck(createDeck(decks[pData.deckId]));
-            }
-            const drawnCard = pData.deck.pop();
-            pData.hand = pData.hand ? [...pData.hand, drawnCard] : [drawnCard];
-            pData.sum += drawnCard;
-            logBattleMessage(`${pData.name} drew a card.`);
-            const playerDeckConfig = decks[pData.deckId];
-            if (pData.sum > playerDeckConfig.jackpot) {
-                logBattleMessage(`${pData.name} busted!`);
-                pData.hand = [];
-                pData.sum = 0;
-                pData.bet = 0;
-            }
+        if (pData && pData.hp > 0 && pData.status === 'acting') {
+            pData.status = 'waiting'; // Lock the state
+            const result = engine.handleDraw(pData);
+            result.logMessages.forEach(logBattleMessage);
+            return result.updatedPlayer;
         }
         return pData;
     });
 }
 
-// performAttack is now correct.
 function performAttack() {
     const playerRef = ref(db, `lobbies/${currentLobby}/battle/players/${currentPlayerId}`);
     runTransaction(playerRef, (pData) => {
-        if (pData && pData.status === 'acting') {
-            pData.status = 'waiting';
-            const playerDeckConfig = decks[pData.deckId];
-            const winnings = pData.bet * playerDeckConfig.g(pData.sum);
-            const damage = Math.floor(winnings);
-            logBattleMessage(`${pData.name} attacks for ${damage} damage!`);
-            if (damage > 0) {
+        if (pData && pData.hp > 0 && pData.status === 'acting') {
+            pData.status = 'waiting'; // Lock the state
+            const result = engine.handleAttack(pData);
+            result.logMessages.forEach(logBattleMessage);
+
+            if (result.damageDealt > 0) {
                 const monsterHpRef = ref(db, `lobbies/${currentLobby}/battle/monster/hp`);
-                runTransaction(monsterHpRef, (hp) => (hp || 0) - damage);
+                runTransaction(monsterHpRef, (hp) => (hp || 0) - result.damageDealt);
             }
-            pData.money = Math.floor(pData.money + winnings);
-            pData.hand = [];
-            pData.sum = 0;
-            pData.bet = 0;
+            return result.updatedPlayer;
         }
         return pData;
     });
 }
 
-// startEnemyTurn is now correct.
 function startEnemyTurn() {
     get(battleRef).then(snapshot => {
         const battleData = snapshot.val();
         if (!isHost || !battleData || battleData.phase === 'ENEMY_TURN') return;
+
         update(battleRef, { phase: 'ENEMY_TURN', phaseEndTime: Date.now() + 3000 });
+
         setTimeout(() => {
             const damageUpdates = {};
             const lobbyPlayerUpdates = {};
             let livingPlayersCount = 0;
             const monster = monsters[battleData.monster.type];
+
             for (const pId in battleData.players) {
                 const pData = battleData.players[pId];
                 if (pData.hp > 0) {
@@ -287,9 +310,13 @@ function startEnemyTurn() {
                         damageUpdates[`/players/${pId}/hp`] = newHp;
                         lobbyPlayerUpdates[`/players/${pId}/hp`] = newHp;
                         logBattleMessage(`${monster.name} hits ${pData.name} for ${monster.attack} damage!`);
+                        if (newHp <= 0) {
+                            logBattleMessage(`${pData.name} has been defeated!`);
+                        }
                     } else {
                         logBattleMessage(`${monster.name} attacks ${pData.name} but MISSES!`);
                     }
+
                     if ((damageUpdates[`/players/${pId}/hp`] ?? pData.hp) > 0) {
                         livingPlayersCount++;
                     }
@@ -297,24 +324,34 @@ function startEnemyTurn() {
             }
             update(lobbyRef, lobbyPlayerUpdates);
             update(battleRef, damageUpdates);
+            
             if (livingPlayersCount === 0) {
                 setTimeout(() => set(child(lobbyRef, 'gameState/status'), 'defeat'), 1000);
                 return;
             }
+
             get(child(battleRef, 'monster/hp')).then(hpSnap => {
                 if (hpSnap.val() <= 0) {
                     set(child(lobbyRef, 'gameState/status'), 'victory');
                     return;
                 }
+
                 setTimeout(() => {
                     const nextTurnUpdates = {};
                     nextTurnUpdates['phase'] = 'PLAYER_TURN';
                     nextTurnUpdates['phaseEndTime'] = Date.now() + 25000;
                     nextTurnUpdates['turn'] = (battleData.turn || 1) + 1;
+
                     for (const pId in battleData.players) {
                         const pData = battleData.players[pId];
                         if (pData.hp > 0) {
-                            nextTurnUpdates[`players/${pId}/status`] = (pData.bet === 0) ? 'needs_bet' : 'acting';
+                            if (pData.status === 'waiting') {
+                                // If they were waiting, they drew successfully, so they can act again
+                                nextTurnUpdates[`players/${pId}/status`] = 'acting';
+                            } else {
+                                // Otherwise, they must need a bet (attacked, busted, or did nothing)
+                                nextTurnUpdates[`players/${pId}/status`] = 'needs_bet';
+                            }
                         }
                     }
                     update(battleRef, nextTurnUpdates);
