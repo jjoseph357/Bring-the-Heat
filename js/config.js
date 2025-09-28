@@ -20,12 +20,12 @@ export const monsters = {
     // Tier for Normal Battles
     normal: {
         slime: { name: "Vicious Slime", hp: 50, attack: 5, hitChance: 0.30, goldDrop: [7, 15] },
-        goblin: { name: "Cave Goblin", hp: 50, attack: 10, hitChance: 0.40, goldDrop: [10, 20] }
+        goblin: { name: "Cave Goblin", hp: 50, attack: 10, hitChance: 0.30, goldDrop: [10, 20] }
     },
     // Tier for Elite Battles
     elite: {
-        stoneGolem: { name: "Stone Golem", hp: 150, attack: 10, hitChance: 0.50, goldDrop: [40, 60] },
-        arcaneSprite: { name: "Arcane Sprite", hp: 100, attack: 20, hitChance: 0.50, goldDrop: [50, 75] }
+        stoneGolem: { name: "Stone Golem", hp: 150, attack: 10, hitChance: 0.40, goldDrop: [40, 60] },
+        arcaneSprite: { name: "Arcane Sprite", hp: 100, attack: 20, hitChance: 0.40, goldDrop: [50, 75] }
     },
     // Tier for the Final Boss
     boss: {

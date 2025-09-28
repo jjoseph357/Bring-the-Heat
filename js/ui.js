@@ -13,14 +13,18 @@ class MapInteraction {
         this.startX = 0;
         this.startY = 0;
 
-        this.viewport.onwheel = this.onWheel.bind(this);
-        this.viewport.onmousedown = this.onMouseDown.bind(this);
-        this.viewport.onmousemove = this.onMouseMove.bind(this);
-        this.viewport.onmouseup = this.onMouseUp.bind(this);
-        this.viewport.onmouseleave = this.onMouseUp.bind(this); // Stop panning if mouse leaves
+        // Defensive: guard event attachment if viewport missing
+        if (this.viewport) {
+            this.viewport.onwheel = this.onWheel.bind(this);
+            this.viewport.onmousedown = this.onMouseDown.bind(this);
+            this.viewport.onmousemove = this.onMouseMove.bind(this);
+            this.viewport.onmouseup = this.onMouseUp.bind(this);
+            this.viewport.onmouseleave = this.onMouseUp.bind(this); // Stop panning if mouse leaves
+        }
     }
 
     applyTransform() {
+        if (!this.canvas) return;
         this.canvas.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.scale})`;
     }
 
@@ -61,6 +65,8 @@ class MapInteraction {
 
     // A function to center and zoom the map on a specific node (like the start)
     centerOn(x, y) {
+        if (!this.viewport) return;
+        // center the given x,y (screen coords) in the viewport
         this.panX = (this.viewport.clientWidth / 2) - (x * this.scale);
         this.panY = (this.viewport.clientHeight / 2) - (y * this.scale);
         this.applyTransform();
@@ -74,6 +80,7 @@ export const elements = {
     multiplayerLobby: document.getElementById('multiplayer-lobby'),
     gameScreen: document.getElementById('game-screen'),
     mapContainer: document.getElementById('map-container'),
+    mapNodes: document.getElementById('map-nodes'),
     battleContainer: document.getElementById('battle-container'),
     endOfBattleScreen: document.getElementById('end-of-battle-screen'),
 
@@ -93,10 +100,10 @@ export const elements = {
     lobbyDeckDetails: document.getElementById('lobby-deck-details'),
 
     // Map
-    mapNodes: document.getElementById('map-nodes'),
     votingStatus: document.getElementById('voting-status'),
 
     // Battle
+    monsterArea: document.getElementById('monster-area'),
     monsterHp: document.getElementById('monster-hp'),
     monsterName: document.getElementById('monster-name'),
     phaseTitle: document.getElementById('phase-title'),
@@ -115,18 +122,28 @@ export const elements = {
     returnToMapBtn: document.getElementById('return-to-map-btn'),
     defeatContinueBtn: document.getElementById('defeat-continue-btn'),
     gameLog: document.getElementById('game-log'),
-    partyStatsContainer: document.getElementById('party-stats-container'), // ADD THIS
+    partyStatsContainer: document.getElementById('party-stats-container'),
+
+    // Reward and card selection panels (must exist in index.html)
+    rewardChoices: document.getElementById('rewardChoices'),
+    cardSelection: document.getElementById('cardSelection'),
 };
 
 let mapInteractionHandler = null;
 
 export function showScreen(screenElement) {
+    if (!screenElement) return;
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     screenElement.classList.add('active');
 }
 
 export function updateDeckDetails() {
+    if (!elements.deckSelect || !elements.deckDetails) return;
     const selectedDeck = decks[elements.deckSelect.value];
+    if (!selectedDeck) {
+        elements.deckDetails.innerHTML = '';
+        return;
+    }
     let cardList = selectedDeck.cards.map(card => `<li>Value ${card.v}: ${card.c} cards</li>`).join('');
     elements.deckDetails.innerHTML = `
         <p><strong>Jackpot:</strong> ${selectedDeck.jackpot}</p>
@@ -135,14 +152,16 @@ export function updateDeckDetails() {
 }
 
 export function disableActionButtons() {
+    if (!elements.drawCardBtn || !elements.attackBtn) return;
     elements.drawCardBtn.disabled = true;
     elements.attackBtn.disabled = true;
 }
 
 export function updatePartyStats(players, myPlayerId, reviveCallback) {
     const container = elements.partyStatsContainer;
+    if (!container) return;
     container.innerHTML = '';
-    const myData = players[myPlayerId];
+    const myData = players ? players[myPlayerId] : null;
 
     for (const pId in players) {
         const pData = players[pId];
@@ -154,7 +173,7 @@ export function updatePartyStats(players, myPlayerId, reviveCallback) {
             <p>Gold: ${pData.gold || 0}</p>
         `;
 
-        // --- NEW: Revive Button Logic ---
+        // Revive button logic
         if (pData.hp <= 0) {
             const reviveCost = 50 + ((pData.deaths || 0) * 50);
             const reviveBtn = document.createElement('button');
@@ -162,7 +181,7 @@ export function updatePartyStats(players, myPlayerId, reviveCallback) {
             reviveBtn.textContent = `Revive (${reviveCost} Gold)`;
 
             // Players can only revive themselves and only if they have enough gold.
-            if (pId !== myPlayerId || !myData || myData.gold < reviveCost) {
+            if (pId !== myPlayerId || !myData || (myData.gold || 0) < reviveCost) {
                 reviveBtn.disabled = true;
             }
 
@@ -173,45 +192,45 @@ export function updatePartyStats(players, myPlayerId, reviveCallback) {
             };
             card.appendChild(reviveBtn);
         }
-        // --------------------------------
 
         container.appendChild(card);
     }
 }
 
-
 export function updateBattleUI(battleData, myPlayerId, myDeckId) {
+    if (!battleData || !elements.playerBattleArea) return;
     const deckConfig = myDeckId ? decks[myDeckId] : null;
-    
-    // --- REVISED: Render multiple monster cards ---
-    const monsterArea = document.getElementById('monster-area');
-    monsterArea.innerHTML = ''; // Clear previous monsters
-    battleData.monsters.forEach(monster => {
-        const card = document.createElement('div');
-        card.className = 'monster-card';
-        if (monster.hp <= 0) {
-            card.classList.add('dead');
-        }
-        card.innerHTML = `
-            <h4>${monster.name}</h4>
-            <p>HP: ${monster.hp}</p>
-        `;
-        monsterArea.appendChild(card);
-    });
-    // ---------------------------------------------
-    
-    elements.phaseTitle.textContent = battleData.phase.replace('_', ' ');
 
-    elements.playerJackpot.textContent = deckConfig?.jackpot || 'N/A';
+    // Render monsters
+    const monsterArea = elements.monsterArea;
+    if (monsterArea) {
+        monsterArea.innerHTML = ''; // Clear previous monsters
+        (battleData.monsters || []).forEach(monster => {
+            const card = document.createElement('div');
+            card.className = 'monster-card';
+            if (monster.hp <= 0) {
+                card.classList.add('dead');
+            }
+            card.innerHTML = `
+                <h4>${monster.name}</h4>
+                <p>HP: ${monster.hp}</p>
+            `;
+            monsterArea.appendChild(card);
+        });
+    }
 
+    elements.phaseTitle && (elements.phaseTitle.textContent = (battleData.phase || '').replace('_', ' '));
+    elements.playerJackpot && (elements.playerJackpot.textContent = deckConfig?.jackpot || 'N/A');
+
+    // Player area
     const playerArea = elements.playerBattleArea;
     playerArea.innerHTML = '';
-    for (const pId in battleData.players) {
+    for (const pId in (battleData.players || {})) {
         const pData = battleData.players[pId];
         const playerCard = document.createElement('div');
         playerCard.className = 'player-battle-info';
         if (pId === myPlayerId) playerCard.classList.add('is-self');
-        
+
         if (pData.hp <= 0) {
             playerCard.classList.add('dead');
             pData.status = 'dead';
@@ -223,118 +242,159 @@ export function updateBattleUI(battleData, myPlayerId, myDeckId) {
             <p>Status: ${pData.status || 'N/A'}</p>
             <p>Charge: ${pData.charge || 0}</p>
             <p>Sum: ${pData.sum || 0}</p>
+            <p>Gold: ${pData.gold || 0}</p>
         `;
         playerArea.appendChild(playerCard);
     }
 
-    const myData = battleData.players[myPlayerId];
+    // Local player controls + info
+    const myData = battleData.players ? battleData.players[myPlayerId] : null;
     if (!myData || myData.hp <= 0) {
-        elements.manaInput.style.display = 'none';
-        elements.chargeBtn.style.display = 'none';
-        elements.drawCardBtn.style.display = 'none';
-        elements.attackBtn.style.display = 'none';
-        elements.playerMana.textContent = "0";
-        elements.playerSum.textContent = "0";
-        elements.playerMultiplier.textContent = "0.00";
-        elements.playerHandContainer.innerHTML = '';
+        // Hide action controls for dead or missing player
+        if (elements.manaInput) elements.manaInput.style.display = 'none';
+        if (elements.chargeBtn) elements.chargeBtn.style.display = 'none';
+        if (elements.drawCardBtn) elements.drawCardBtn.style.display = 'none';
+        if (elements.attackBtn) elements.attackBtn.style.display = 'none';
+        if (elements.playerMana) elements.playerMana.textContent = "0";
+        if (elements.playerSum) elements.playerSum.textContent = "0";
+        if (elements.playerMultiplier) elements.playerMultiplier.textContent = "0.00";
+        if (elements.playerHandContainer) elements.playerHandContainer.innerHTML = '';
         return;
-    };
+    }
 
-    elements.playerMana.textContent = Math.floor(myData.mana);
-    elements.playerSum.textContent = myData.sum;
-    const multiplier = myData.sum > 0 && deckConfig ? deckConfig.g(myData.sum).toFixed(2) : '0.00';
-    elements.playerMultiplier.textContent = multiplier;
+    if (elements.playerMana) elements.playerMana.textContent = Math.floor(myData.mana || 0);
+    if (elements.playerSum) elements.playerSum.textContent = (myData.sum != null ? myData.sum : 0);
+    const multiplier = (myData.sum > 0 && deckConfig) ? deckConfig.g(myData.sum).toFixed(2) : '0.00';
+    if (elements.playerMultiplier) elements.playerMultiplier.textContent = multiplier;
 
+    // Render hand
     const handContainer = elements.playerHandContainer;
-    handContainer.innerHTML = '';
-    myData.hand?.forEach(cardValue => displayCard(cardValue, handContainer));
+    if (handContainer) {
+        handContainer.innerHTML = '';
+        (myData.hand || []).forEach(cardValue => displayCard(cardValue, handContainer));
+    }
 
-    const canBet = battleData.phase === 'PLAYER_TURN' && myData.status === 'needs_bet';
+    // Action visibility
+    const canBet = battleData.phase === 'PLAYER_TURN' && myData.status === 'needs_mana';
     const canAct = battleData.phase === 'PLAYER_TURN' && myData.status === 'acting';
-    
-    elements.manaInput.style.display = canBet ? 'inline-block' : 'none';
-    elements.chargeBtn.style.display = canBet ? 'inline-block' : 'none';
-    elements.drawCardBtn.style.display = canAct ? 'inline-block' : 'none';
-    elements.attackBtn.style.display = canAct ? 'inline-block' : 'none';
-    elements.drawCardBtn.disabled = !canAct;
-    elements.attackBtn.disabled = !canAct;
 
-    elements.gameLog.innerHTML = '';
-    if (battleData.log) {
-        const messages = Object.values(battleData.log).slice(-5);
-        messages.forEach(logEntry => {
-            const p = document.createElement('p');
-            p.textContent = logEntry.message;
-            elements.gameLog.appendChild(p);
-        });
-        elements.gameLog.scrollTop = elements.gameLog.scrollHeight;
+    if (elements.manaInput) elements.manaInput.style.display = canBet ? 'inline-block' : 'none';
+    if (elements.chargeBtn) elements.chargeBtn.style.display = canBet ? 'inline-block' : 'none';
+    if (elements.drawCardBtn) elements.drawCardBtn.style.display = canAct ? 'inline-block' : 'none';
+    if (elements.attackBtn) elements.attackBtn.style.display = canAct ? 'inline-block' : 'none';
+    if (elements.drawCardBtn) elements.drawCardBtn.disabled = !canAct;
+    if (elements.attackBtn) elements.attackBtn.disabled = !canAct;
+
+    // Game log (last few messages)
+    if (elements.gameLog) {
+        elements.gameLog.innerHTML = '';
+        if (battleData.log) {
+            const messages = Object.values(battleData.log).slice(-6);
+            messages.forEach(logEntry => {
+                const p = document.createElement('p');
+                p.textContent = logEntry.message;
+                elements.gameLog.appendChild(p);
+            });
+            elements.gameLog.scrollTop = elements.gameLog.scrollHeight;
+        }
     }
 }
-
 
 function displayCard(value, container) {
     const cardEl = document.createElement('div');
     cardEl.className = 'card';
     cardEl.textContent = value;
     cardEl.dataset.value = value;
+
+    // If this is a short numeric card (e.g. "1", "11", "-1"), make it large.
+    if (/^-?\d+$/.test(String(value).trim()) && String(value).trim().length <= 2) {
+        cardEl.classList.add('numeric');
+    }
+
     container.appendChild(cardEl);
 }
 
-export function showGameScreen(mode, resultData, isHost) {
+
+export function showGameScreen(mode, resultData = {}, isHost = false) {
     showScreen(elements.gameScreen);
-    elements.mapContainer.classList.add('hidden');
-    elements.battleContainer.classList.add('hidden');
-    elements.endOfBattleScreen.classList.add('hidden');
-    elements.partyStatsContainer.style.display = 'none';
+
+    // Hide sub-views first
+    elements.mapContainer && elements.mapContainer.classList.add('hidden');
+    elements.battleContainer && elements.battleContainer.classList.add('hidden');
+    elements.endOfBattleScreen && elements.endOfBattleScreen.classList.add('hidden');
+    if (elements.partyStatsContainer) elements.partyStatsContainer.style.display = 'none';
+
+    // Hide any reward/card panels by default
+    if (elements.rewardChoices) elements.rewardChoices.style.display = 'none';
+    if (elements.cardSelection) elements.cardSelection.style.display = 'none';
 
     if (mode === 'map') {
-        elements.mapContainer.classList.remove('hidden');
-        elements.partyStatsContainer.style.display = 'flex';
+        elements.mapContainer && elements.mapContainer.classList.remove('hidden');
+        if (elements.partyStatsContainer) elements.partyStatsContainer.style.display = 'flex';
     }
     if (mode === 'battle') {
-        elements.battleContainer.classList.remove('hidden');
+        elements.battleContainer && elements.battleContainer.classList.remove('hidden');
     }
     if (mode === 'end_battle') {
         const titleEl = document.getElementById('battle-result-title');
         const textEl = document.getElementById('battle-result-text');
         const goldRewardEl = document.getElementById('gold-reward-text');
-        
+
         // Hide all buttons by default
-        elements.returnToMapBtn.style.display = 'none';
-        elements.defeatContinueBtn.style.display = 'none';
-        goldRewardEl.style.display = 'none';
+        if (elements.returnToMapBtn) elements.returnToMapBtn.style.display = 'none';
+        if (elements.defeatContinueBtn) elements.defeatContinueBtn.style.display = 'none';
+        if (goldRewardEl) goldRewardEl.style.display = 'none';
 
         switch (resultData.result) {
             case 'victory':
-                titleEl.textContent = 'Victory!';
-                textEl.textContent = 'The monster has been vanquished.';
-                goldRewardEl.textContent = `Each party member receives ${resultData.goldReward} Gold!`;
-                goldRewardEl.style.display = 'block';
-                if (isHost) elements.returnToMapBtn.style.display = 'block';
+                if (titleEl) titleEl.textContent = 'Victory!';
+                if (textEl) textEl.textContent = 'The monster has been vanquished.';
+                if (goldRewardEl) {
+                    goldRewardEl.textContent = `Each party member receives ${resultData.goldReward} Gold!`;
+                    goldRewardEl.style.display = 'block';
+                }
+                if (isHost && elements.returnToMapBtn) elements.returnToMapBtn.style.display = 'block';
                 break;
+
             case 'defeat':
-                titleEl.textContent = 'Defeat!';
-                textEl.textContent = 'Your party has fallen. The expedition is over.';
-                if (isHost) elements.defeatContinueBtn.style.display = 'block';
+                if (titleEl) titleEl.textContent = 'Defeat!';
+                if (textEl) textEl.textContent = 'Your party has fallen. The expedition is over.';
+                if (isHost && elements.defeatContinueBtn) elements.defeatContinueBtn.style.display = 'block';
                 break;
-            case 'event': // Generic case for Rest, Shop, etc.
-                titleEl.textContent = resultData.title;
-                textEl.textContent = resultData.message;
-                // Only the host sees the button to prevent multiple state changes
-                if (isHost) elements.returnToMapBtn.style.display = 'block';
+
+            case 'event':
+                if (titleEl) titleEl.textContent = resultData.title || 'Event';
+                if (textEl) textEl.textContent = resultData.message || '';
+                if (isHost && elements.returnToMapBtn) elements.returnToMapBtn.style.display = 'block';
+                break;
+
+            default:
+                if (titleEl) titleEl.textContent = resultData.title || '';
+                if (textEl) textEl.textContent = resultData.message || '';
+                if (isHost && elements.returnToMapBtn) elements.returnToMapBtn.style.display = 'block';
                 break;
         }
-        elements.endOfBattleScreen.classList.remove('hidden');
+
+        // If the server passed explicit reward choices, show them (caller should wire callbacks separately)
+        if (Array.isArray(resultData.extraRewards) && resultData.extraRewards.length > 0) {
+            // Leave it visible — caller should call showRewardChoices(resultData.extraRewards, handler)
+            if (elements.rewardChoices) {
+                elements.rewardChoices.innerHTML = '<p>Reward choices ready — select one.</p>';
+                elements.rewardChoices.style.display = 'block';
+            }
+        }
+
+        elements.endOfBattleScreen && elements.endOfBattleScreen.classList.remove('hidden');
     }
 }
 
-
-// --- replace the existing renderMap(...) and determineVotableNodes(...) with this code ---
+// --- Map & rendering logic (unchanged except for defensive checks) ---
 
 export function renderMap(mapData, gameState, onNodeClick) {
     const mapContainer = document.getElementById('map-container');
     const mapNodes = elements.mapNodes;
-    
+    if (!mapNodes || !mapData) return;
+
     // Initialize the pan/zoom handler if it doesn't exist
     if (!mapInteractionHandler) {
         mapInteractionHandler = new MapInteraction(mapContainer, mapNodes);
@@ -343,10 +403,10 @@ export function renderMap(mapData, gameState, onNodeClick) {
     mapNodes.innerHTML = ''; // Clear previous map
     const nodeElements = {};
 
-    const logicalWidth = 25; 
+    const logicalWidth = 25;
     const logicalHeight = 40;
-    const canvasWidth = mapNodes.clientWidth;
-    const canvasHeight = mapNodes.clientHeight;
+    const canvasWidth = mapNodes.clientWidth || 1600;
+    const canvasHeight = mapNodes.clientHeight || 1600;
     const padding = 100;
 
     const scaleX = (canvasWidth - padding * 2) / logicalWidth;
@@ -359,18 +419,18 @@ export function renderMap(mapData, gameState, onNodeClick) {
     };
 
     // Draw lines for connections first
-    mapData.connections.forEach(conn => {
+    (mapData.connections || []).forEach(conn => {
         const fromNode = mapData.nodes[conn.from];
         const toNode = mapData.nodes[conn.to];
         if (fromNode && toNode) {
             const p1 = transformPoint(fromNode.pos);
             const p2 = transformPoint(toNode.pos);
-            
+
             const line = document.createElement('div');
             line.className = 'node-line';
             const length = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
             const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
-            
+
             line.style.width = `${length}px`;
             line.style.transform = `rotate(${angle}deg)`;
             line.style.left = `${p1.x}px`;
@@ -380,13 +440,13 @@ export function renderMap(mapData, gameState, onNodeClick) {
     });
 
     // Draw nodes on top of lines
-    Object.values(mapData.nodes).forEach(node => {
+    Object.values(mapData.nodes || {}).forEach(node => {
         const screenPos = transformPoint(node.pos);
         const nodeEl = document.createElement('div');
         nodeEl.className = 'node';
         nodeEl.id = `map-node-${node.id}`;
         nodeEl.textContent = node.type;
-        
+
         nodeEl.style.left = `${screenPos.x}px`;
         nodeEl.style.top = `${screenPos.y}px`;
 
@@ -394,38 +454,39 @@ export function renderMap(mapData, gameState, onNodeClick) {
         const nodeIdStr = String(node.id);
         if (gameState.clearedNodes?.some(c => String(c) === nodeIdStr)) nodeEl.classList.add('cleared');
         if (String(gameState.currentNodeId) === nodeIdStr) nodeEl.classList.add('current');
-        
+
         mapNodes.appendChild(nodeEl);
         nodeElements[nodeIdStr] = nodeEl; // store by string key
     });
 
-    // Mark the most-recently cleared node with a special class so players can see the node they just beat.
+    // Mark most-recently cleared node
     const lastClearedNodeId = gameState.clearedNodes?.[gameState.clearedNodes.length - 1];
     if (lastClearedNodeId !== undefined) {
         const el = nodeElements[String(lastClearedNodeId)];
         if (el) el.classList.add('just-cleared');
     }
 
-    // Votable logic (determineVotableNodes now returns string ids)
+    // Votable logic
     const votableNodeIds = determineVotableNodes(mapData, gameState);
     votableNodeIds.forEach(nodeId => {
         const nodeEl = nodeElements[String(nodeId)];
         if (nodeEl) {
             nodeEl.classList.add('votable');
             nodeEl.onclick = (event) => {
-                event.stopPropagation(); // Prevent click from triggering a pan
-                // convert to Number for callers that expect numeric ids (singleplayer)
+                event.stopPropagation();
                 const numericId = Number(nodeId);
                 onNodeClick(typeof onNodeClick === 'function' ? numericId : nodeId);
             };
         }
     });
-    
-    elements.votingStatus.textContent = votableNodeIds.length > 0 ? "Choose your next destination." : gameState.clearedNodes?.some(c => String(c) === '1') ? "Congratulations! You defeated the boss!" : "Battle in progress...";
+
+    if (elements.votingStatus) {
+        elements.votingStatus.textContent = votableNodeIds.length > 0 ? "Choose your next destination." : gameState.clearedNodes?.some(c => String(c) === '1') ? "Congratulations! You defeated the boss!" : "Battle in progress...";
+    }
 
     // Auto-center the view on the last cleared node
     const focusNodeId = lastClearedNodeId ?? 0;
-    const focusNode = mapData.nodes[focusNodeId];
+    const focusNode = mapData.nodes ? mapData.nodes[focusNodeId] : null;
     if (focusNode) {
         const focusPos = transformPoint(focusNode.pos);
         mapInteractionHandler.centerOn(focusPos.x, focusPos.y);
@@ -433,55 +494,53 @@ export function renderMap(mapData, gameState, onNodeClick) {
 }
 
 function determineVotableNodes(mapData, gameState) {
-    if (gameState.status !== 'map_vote') return [];
+    if (!gameState || gameState.status !== 'map_vote') return [];
+    const cleared = gameState.clearedNodes || [0];
+    const lastClearedNodeId = String(cleared[cleared.length - 1] || 0);
 
-    // The clearedNodes array is now guaranteed to exist and start with [0].
-    // Find the ID of the most recently cleared node (normalize to string).
-    const lastClearedNodeId = String(gameState.clearedNodes[gameState.clearedNodes.length - 1]);
-
-    // Find all connections that originate from the last cleared node.
-    const connections = mapData.connections
+    const connections = (mapData.connections || [])
         .filter(conn => String(conn.from) === lastClearedNodeId)
         .map(conn => String(conn.to));
 
-    // Filter out any nodes that might have been part of an alternate path already cleared.
     const uniqueConnections = [...new Set(connections)];
-    return uniqueConnections.filter(nodeId => !gameState.clearedNodes.some(c => String(c) === nodeId));
+    return uniqueConnections.filter(nodeId => !cleared.some(c => String(c) === nodeId));
 }
 
 export function setTimerVisibility(visible) {
-    elements.timerContainer.style.display = visible ? 'block' : 'none';
+    if (elements.timerContainer) elements.timerContainer.style.display = visible ? 'block' : 'none';
 }
 
 let battleTimerInterval = null;
 export function updateTimer(endTime) {
     if (battleTimerInterval) clearInterval(battleTimerInterval);
+    if (!endTime) {
+        if (elements.turnTimer) elements.turnTimer.textContent = '--';
+        return;
+    }
     battleTimerInterval = setInterval(() => {
         const timeLeft = Math.max(0, Math.round((endTime - Date.now()) / 1000));
-        elements.turnTimer.textContent = timeLeft;
-        if (timeLeft <= 0) clearInterval(battleTimerInterval);
+        if (elements.turnTimer) elements.turnTimer.textContent = timeLeft;
+        if (timeLeft <= 0 && battleTimerInterval) clearInterval(battleTimerInterval);
     }, 500);
 }
 
 export function updatePlayerList(players) {
+    if (!elements.playerList) return;
     elements.playerList.innerHTML = '';
     for (const pId in players) {
         const player = players[pId];
-        // Look up the full deck name from the config
         const deckName = decks[player.deck]?.name || 'Unknown Deck';
-        // Display the player's name and their chosen deck
         elements.playerList.innerHTML += `<p>${player.name} (Deck: ${deckName})</p>`;
     }
 }
 
 export function clearMapHighlights() {
-    const mapNodes = document.getElementById('map-nodes');
+    const mapNodes = elements.mapNodes;
     if (!mapNodes) return;
 
     // Remove highlight classes from any leftover nodes
     mapNodes.querySelectorAll('.node').forEach(n => {
         n.classList.remove('current', 'votable', 'just-cleared', 'cleared');
-        // remove inline onclick handlers to avoid stale callbacks
         n.onclick = null;
     });
 
@@ -492,3 +551,52 @@ export function clearMapHighlights() {
     mapNodes.innerHTML = '';
 }
 
+export function showRewardChoices(rewards, callback) {
+    const container = elements.rewardChoices;
+    if (!container) return;
+    container.innerHTML = '';
+    rewards.forEach(r => {
+        const btn = document.createElement('button');
+        btn.textContent = r;
+        btn.onclick = () => {
+            // hide UI and forward selection
+            container.style.display = 'none';
+            if (typeof callback === 'function') callback(r);
+        };
+        container.appendChild(btn);
+    });
+    container.style.display = 'block';
+}
+
+
+export function showCardSelection(cardChoices, callback) {
+    const container = elements.cardSelection;
+    if (!container) return;
+    container.innerHTML = "<h3>Choose a Card</h3>";
+    cardChoices.forEach(card => {
+        const btn = document.createElement("button");
+        btn.textContent = card;
+        btn.onclick = () => {
+            container.style.display = "none"; // hide after choice
+            if (typeof callback === 'function') callback(card);
+        };
+        container.appendChild(btn);
+    });
+    container.style.display = "block";
+}
+
+export function hideRewardChoices() {
+    const container = document.getElementById("rewardChoices");
+    if (container) {
+        container.innerHTML = "";
+        container.style.display = "none";
+    }
+}
+
+export function hideCardSelection() {
+    const container = document.getElementById("cardSelection");
+    if (container) {
+        container.innerHTML = "";
+        container.style.display = "none";
+    }
+}
