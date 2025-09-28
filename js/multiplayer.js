@@ -433,7 +433,7 @@ function createBattleState(nodeType, currentLobbyData) {
             const shuffledDeck = shuffleDeck(baseDeck);
 
             // Calculate starting mana with items and consumables
-            let startingMana = 2000;
+            let startingMana = 20;
             startingMana += 10 * ((player.items || []).filter(i => i === "Increase starting mana by 10 (stackable)").length);
             startingMana += 5 * ((player.items || []).filter(i => i === "Increase starting mana by 5 (event)").length);
             startingMana -= 5 * ((player.items || []).filter(i => i === "Decrease starting mana by 5").length);
