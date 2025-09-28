@@ -450,3 +450,19 @@ hr { border-color: #444; }
     position: relative;
 }
 
+#main-menu.screen.active {
+    background-image: url('./Infernos_Gambit_-_Thumbnail_2.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    /* Add a semi-transparent overlay to make text more readable */
+    background-color: rgba(0, 0, 0, 0.6);
+    background-blend-mode: darken;
+    padding: 40px;
+    border-radius: 15px;
+    height: 90vh; /* Make it take up most of the viewport height */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}

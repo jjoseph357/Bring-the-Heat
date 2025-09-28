@@ -19,7 +19,7 @@
   "build": {
     "appId": "com.infernosgambit.game",
     "productName": "Inferno's Gambit",
-     "files": [
+    "files": [
       "**/*",
       "!node_modules/*",
       "node_modules/delaunator/delaunator.min.js"
