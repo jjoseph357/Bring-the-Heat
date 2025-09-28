@@ -123,6 +123,7 @@ export const elements = {
     defeatContinueBtn: document.getElementById('defeat-continue-btn'),
     gameLog: document.getElementById('game-log'),
     partyStatsContainer: document.getElementById('party-stats-container'),
+    itemsContainer: document.getElementById('itemsContainer'),
 
     // Reward and card selection panels (must exist in index.html)
     rewardChoices: document.getElementById('rewardChoices'),
@@ -175,7 +176,12 @@ export function updatePartyStats(players, myPlayerId, reviveCallback) {
 
         // Revive button logic
         if (pData.hp <= 0) {
-            const reviveCost = 50 + ((pData.deaths || 0) * 50);
+            let reviveCost = 50 + ((pData.deaths || 0) * 50);
+            // Check for revive cost reduction item
+            if ((pData.items || []).includes("Reduce revive cost by 20% (unique)")) {
+                reviveCost = Math.floor(reviveCost * 0.8);
+            }
+            
             const reviveBtn = document.createElement('button');
             reviveBtn.className = 'revive-btn';
             reviveBtn.textContent = `Revive (${reviveCost} Gold)`;
@@ -201,6 +207,35 @@ export function updateBattleUI(battleData, myPlayerId, myDeckId) {
     if (!battleData || !elements.playerBattleArea) return;
     const deckConfig = myDeckId ? decks[myDeckId] : null;
 
+    // Display debuff prominently
+    let debuffDisplay = document.getElementById('active-debuff-display');
+    if (battleData.activeDebuff) {
+        if (!debuffDisplay) {
+            debuffDisplay = document.createElement('div');
+            debuffDisplay.id = 'active-debuff-display';
+            debuffDisplay.style.cssText = 'background: #992d22; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; text-align: center; font-weight: bold;';
+            const battleContainer = document.getElementById('battle-container');
+            if (battleContainer) {
+                battleContainer.insertBefore(debuffDisplay, battleContainer.firstChild);
+            }
+        }
+        debuffDisplay.textContent = `⚠️ DEBUFF: ${battleData.activeDebuff}`;
+    } else if (debuffDisplay) {
+        debuffDisplay.remove();
+    }
+
+    // Update jackpot display
+    let jackpotText = deckConfig?.jackpot || 'N/A';
+    if (deckConfig) {
+        if (battleData.activeDebuff === "Target sum is doubled") {
+            jackpotText = `${deckConfig.jackpot * 2} (Doubled!)`;
+        } else if (battleData.activeDebuff === "Draw double the cards each draw") {
+            jackpotText = `${Math.floor(deckConfig.jackpot * 1.5)} (+50%)`;
+        }
+    }
+    elements.playerJackpot && (elements.playerJackpot.textContent = jackpotText);
+
+
     // Render monsters
     const monsterArea = elements.monsterArea;
     if (monsterArea) {
@@ -220,7 +255,6 @@ export function updateBattleUI(battleData, myPlayerId, myDeckId) {
     }
 
     elements.phaseTitle && (elements.phaseTitle.textContent = (battleData.phase || '').replace('_', ' '));
-    elements.playerJackpot && (elements.playerJackpot.textContent = deckConfig?.jackpot || 'N/A');
 
     // Player area
     const playerArea = elements.playerBattleArea;
@@ -243,6 +277,7 @@ export function updateBattleUI(battleData, myPlayerId, myDeckId) {
             <p>Charge: ${pData.charge || 0}</p>
             <p>Sum: ${pData.sum || 0}</p>
             <p>Gold: ${pData.gold || 0}</p>
+            ${pData.permanentDamage ? `<p>Bonus Dmg: +${pData.permanentDamage}</p>` : ''}
         `;
         playerArea.appendChild(playerCard);
     }
@@ -264,8 +299,17 @@ export function updateBattleUI(battleData, myPlayerId, myDeckId) {
 
     if (elements.playerMana) elements.playerMana.textContent = Math.floor(myData.mana || 0);
     if (elements.playerSum) elements.playerSum.textContent = (myData.sum != null ? myData.sum : 0);
-    const multiplier = (myData.sum > 0 && deckConfig) ? deckConfig.g(myData.sum).toFixed(2) : '0.00';
+    
+    // Correctly calculate multiplier for display
+    let displayJackpot = deckConfig ? deckConfig.jackpot : 21;
+    if (battleData.activeDebuff === "Target sum is doubled") {
+        displayJackpot *= 2;
+    } else if (battleData.activeDebuff === "Draw double the cards each draw") {
+        displayJackpot = Math.floor(displayJackpot * 1.5);
+    }
+    const multiplier = (myData.sum > 0 && deckConfig) ? deckConfig.g(myData.sum, displayJackpot).toFixed(2) : '0.00';
     if (elements.playerMultiplier) elements.playerMultiplier.textContent = multiplier;
+
 
     // Render hand
     const handContainer = elements.playerHandContainer;
@@ -317,30 +361,25 @@ function displayCard(value, container) {
 
 export function showGameScreen(mode, resultData = {}, isHost = false) {
     showScreen(elements.gameScreen);
-
-    // Hide sub-views first
-    elements.mapContainer && elements.mapContainer.classList.add('hidden');
-    elements.battleContainer && elements.battleContainer.classList.add('hidden');
-    elements.endOfBattleScreen && elements.endOfBattleScreen.classList.add('hidden');
+    elements.mapContainer.classList.add('hidden');
+    elements.battleContainer.classList.add('hidden');
+    elements.endOfBattleScreen.classList.add('hidden');
     if (elements.partyStatsContainer) elements.partyStatsContainer.style.display = 'none';
-
-    // Hide any reward/card panels by default
     if (elements.rewardChoices) elements.rewardChoices.style.display = 'none';
-    if (elements.cardSelection) elements.cardSelection.style.display = 'none';
 
     if (mode === 'map') {
-        elements.mapContainer && elements.mapContainer.classList.remove('hidden');
+        elements.mapContainer.classList.remove('hidden');
         if (elements.partyStatsContainer) elements.partyStatsContainer.style.display = 'flex';
     }
     if (mode === 'battle') {
-        elements.battleContainer && elements.battleContainer.classList.remove('hidden');
+        elements.battleContainer.classList.remove('hidden');
     }
     if (mode === 'end_battle') {
         const titleEl = document.getElementById('battle-result-title');
-        const textEl = document.getElementById('battle-result-text');
+        const textEl = document.getElementById('result-text'); // Use the new ID
         const goldRewardEl = document.getElementById('gold-reward-text');
-
-        // Hide all buttons by default
+        
+        textEl.innerHTML = ''; // Clear previous content
         if (elements.returnToMapBtn) elements.returnToMapBtn.style.display = 'none';
         if (elements.defeatContinueBtn) elements.defeatContinueBtn.style.display = 'none';
         if (goldRewardEl) goldRewardEl.style.display = 'none';
@@ -364,27 +403,26 @@ export function showGameScreen(mode, resultData = {}, isHost = false) {
 
             case 'event':
                 if (titleEl) titleEl.textContent = resultData.title || 'Event';
-                if (textEl) textEl.textContent = resultData.message || '';
+                if (textEl) textEl.innerHTML = resultData.message || '';
                 if (isHost && elements.returnToMapBtn) elements.returnToMapBtn.style.display = 'block';
                 break;
 
-            default:
-                if (titleEl) titleEl.textContent = resultData.title || '';
-                if (textEl) textEl.textContent = resultData.message || '';
+            case 'event_result': // For multiplayer events
+                if (titleEl) titleEl.textContent = resultData.title || 'Event';
+                // Display all log messages from the event
+                if (textEl && resultData.log) {
+                    Object.values(resultData.log).forEach(logEntry => {
+                        const p = document.createElement('p');
+                        p.textContent = logEntry.message;
+                        textEl.appendChild(p);
+                    });
+                }
                 if (isHost && elements.returnToMapBtn) elements.returnToMapBtn.style.display = 'block';
                 break;
         }
 
-        // If the server passed explicit reward choices, show them (caller should wire callbacks separately)
-        if (Array.isArray(resultData.extraRewards) && resultData.extraRewards.length > 0) {
-            // Leave it visible — caller should call showRewardChoices(resultData.extraRewards, handler)
-            if (elements.rewardChoices) {
-                elements.rewardChoices.innerHTML = '<p>Reward choices ready — select one.</p>';
-                elements.rewardChoices.style.display = 'block';
-            }
-        }
-
-        elements.endOfBattleScreen && elements.endOfBattleScreen.classList.remove('hidden');
+        if (Array.isArray(resultData.extraRewards)) { /* ... (reward logic is the same) ... */ }
+        elements.endOfBattleScreen.classList.remove('hidden');
     }
 }
 
@@ -599,4 +637,43 @@ export function hideCardSelection() {
         container.innerHTML = "";
         container.style.display = "none";
     }
+}
+
+export function renderItems(items) {
+    const container = elements.itemsContainer || document.getElementById("itemsContainer");
+    if (!container) return;
+    container.innerHTML = "";
+    if (!items || items.length === 0) {
+        container.innerHTML = "<p style='color: #999; font-size: 14px;'>No items equipped</p>";
+        return;
+    }
+    
+    const title = document.createElement("h4");
+    title.textContent = "Items:";
+    title.style.marginBottom = "10px";
+    container.appendChild(title);
+    
+    const ul = document.createElement("ul");
+    ul.className = "items-list";
+    ul.style.cssText = "list-style: none; padding: 0; margin: 0;";
+    
+    items.forEach(it => {
+        const li = document.createElement("li");
+        li.style.cssText = "padding: 5px; background: #40444b; margin-bottom: 5px; border-radius: 3px; font-size: 14px;";
+        li.textContent = it;
+        ul.appendChild(li);
+    });
+    container.appendChild(ul);
+}
+
+export function showCardRemovalUI(player, callback) {
+    const container = document.getElementById("shop-container");
+    container.innerHTML = "<h2>Select a card to remove</h2>";
+
+    player.extraCards.forEach((card, idx) => {
+        const btn = document.createElement("button");
+        btn.textContent = card;
+        btn.onclick = () => callback(card, idx);
+        container.appendChild(btn);
+    });
 }

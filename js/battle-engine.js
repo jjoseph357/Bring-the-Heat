@@ -9,12 +9,18 @@ import { decks } from './config.js';
 import { shuffleDeck, createDeck } from './game-logic.js';
 
 /**
- * computeHandSum(hand)
+ * computeHandSum(hand, activeDebuff)
  * Only integer-like card strings (e.g. "1", "-2", "11") count toward the numeric sum.
+ * NOW SUPPORTS DEBUFF: "Drawing the number 3 does not add to sum"
  */
-export function computeHandSum(hand) {
+export function computeHandSum(hand, activeDebuff = null) {
     if (!Array.isArray(hand)) return 0;
     return hand.reduce((acc, card) => {
+        // Check if this is a 3 and we have the debuff active
+        if (activeDebuff === "Drawing the number 3 does not add to sum") {
+            if (card === 3 || card === "3") return acc;
+        }
+        
         if (typeof card === 'number') return acc + card;
         if (typeof card === 'string' && /^-?\d+$/.test(card.trim())) return acc + parseInt(card, 10);
         return acc;
@@ -22,31 +28,42 @@ export function computeHandSum(hand) {
 }
 
 /**
- * getJackpotForPlayer(pData)
+ * getJackpotForPlayer(pData, activeDebuff)
  * Determine the jackpot (target) for the given player object (based on their deck).
- * Falls back to Infinity if deck info missing.
+ * NOW SUPPORTS DEBUFF: "Target sum is doubled"
  */
-function getJackpotForPlayer(pData) {
+function getJackpotForPlayer(pData, activeDebuff = null) {
     const deckConfig = pData && pData.deckId ? decks[pData.deckId] : null;
-    const jackpot = deckConfig && typeof deckConfig.jackpot !== 'undefined' ? Number(deckConfig.jackpot) : Infinity;
+    let jackpot = deckConfig && typeof deckConfig.jackpot !== 'undefined' ? Number(deckConfig.jackpot) : Infinity;
+    
+    // Apply "Target sum is doubled" debuff
+    if (activeDebuff === "Target sum is doubled" && Number.isFinite(jackpot)) {
+        jackpot = jackpot * 2;
+    }
+    
+    // Apply "Draw double the cards" debuff
+    if (activeDebuff === "Draw double the cards each draw" && Number.isFinite(jackpot)) {
+        jackpot = Math.floor(jackpot * 1.5);
+    }
+    
     return Number.isFinite(jackpot) ? jackpot : Infinity;
 }
 
 /**
- * isBusted(pData)
+ * isBusted(pData, activeDebuff)
  * Pure check: does current hand sum exceed the jackpot?
  */
-function isBusted(pData) {
-    const sum = computeHandSum(pData.hand || []);
-    const jackpot = getJackpotForPlayer(pData);
+function isBusted(pData, activeDebuff = null) {
+    const sum = computeHandSum(pData.hand || [], activeDebuff);
+    const jackpot = getJackpotForPlayer(pData, activeDebuff);
     return sum > jackpot;
 }
 
 /**
- * handleCharge(pData, chargeValue)
+ * handleCharge(pData, chargeValue, activeDebuff)
  * Subtracts chargeValue from current mana and sets status so player can act.
  */
-export function handleCharge(pData, chargeValue) {
+export function handleCharge(pData, chargeValue, activeDebuff = null) {
     if (!pData || pData.hp <= 0 || pData.status === 'defeated') {
         return { error: 'Defeated players cannot act.' };
     }
@@ -56,12 +73,12 @@ export function handleCharge(pData, chargeValue) {
     pData.charge = chargeValue;
     pData.mana = (pData.mana || 0) - chargeValue;
     pData.status = 'acting'; // after charge, player can draw/attack
-    pData.sum = computeHandSum(pData.hand || []);
+    pData.sum = computeHandSum(pData.hand || [], activeDebuff);
     return { updatedPlayer: pData };
 }
 
 /**
- * handleDraw(playerData)
+ * handleDraw(playerData, activeDebuff)
  * - Draws 1 card, if it's a draw2 draws up to 2 extra cards one-by-one.
  * - Applies effects for special cards (+2 mana, +1 hp, +5 gold).
  * - After each draw, recomputes sum and checks for bust. If busted:
@@ -70,7 +87,7 @@ export function handleCharge(pData, chargeValue) {
  *     - set status to 'needs_mana' so player must invest again before drawing
  *     - set busted = true
  */
-export function handleDraw(playerData) {
+export function handleDraw(playerData, activeDebuff = null) {
     const logMessages = [];
     if (!playerData || playerData.hp <= 0 || playerData.status === 'defeated') {
         logMessages.push(`${playerData?.name || 'Player'} cannot draw (defeated).`);
@@ -83,7 +100,7 @@ export function handleDraw(playerData) {
 
     if (playerData.deck.length === 0) {
         logMessages.push(`${playerData.name || 'Player'}'s deck is empty!`);
-        playerData.sum = computeHandSum(playerData.hand || []);
+        playerData.sum = computeHandSum(playerData.hand || [], activeDebuff);
         return { updatedPlayer: playerData, logMessages };
     }
 
@@ -110,7 +127,7 @@ export function handleDraw(playerData) {
     logMessages.push(`${playerData.name} drew ${card}`);
 
     // if draw2, draw extra cards one-by-one
-    if (card === 'draw2' || card === 'card that draws two cards') {
+    if (String(card).toLowerCase() === 'draw 2' || String(card).toLowerCase() === 'draw2') {
         logMessages.push(`${playerData.name} draws 2 more cards!`);
         for (let i = 0; i < 2; i++) {
             if (!playerData.deck || playerData.deck.length === 0) break;
@@ -120,10 +137,9 @@ export function handleDraw(playerData) {
 
             applyEffect(extraCard);
 
-            // recompute sum and check for bust immediately
-            playerData.sum = computeHandSum(playerData.hand);
-            if (isBusted(playerData)) {
-                const jackpot = getJackpotForPlayer(playerData);
+            playerData.sum = computeHandSum(playerData.hand, activeDebuff);
+            if (isBusted(playerData, activeDebuff)) {
+                const jackpot = getJackpotForPlayer(playerData, activeDebuff);
                 logMessages.push(`${playerData.name} exceeded the jackpot (sum ${playerData.sum} > ${jackpot}). They lose their hand and must invest more mana.`);
                 playerData.hand = [];
                 playerData.sum = 0;
@@ -138,9 +154,9 @@ export function handleDraw(playerData) {
     }
 
     // final sum check after draw
-    playerData.sum = computeHandSum(playerData.hand);
-    if (isBusted(playerData)) {
-        const jackpot = getJackpotForPlayer(playerData);
+    playerData.sum = computeHandSum(playerData.hand, activeDebuff);
+    if (isBusted(playerData, activeDebuff)) {
+        const jackpot = getJackpotForPlayer(playerData, activeDebuff);
         logMessages.push(`${playerData.name} exceeded the jackpot (sum ${playerData.sum} > ${jackpot}). They lose their hand and must invest more mana.`);
         playerData.hand = [];
         playerData.sum = 0;
@@ -155,12 +171,12 @@ export function handleDraw(playerData) {
 }
 
 /**
- * handleAttack(pData)
+ * handleAttack(pData, activeDebuff)
  * - Returns charge + profit/loss depending on multiplier.
  * - Clears hand, resets sum/charge, resets busted flag.
  * - If mana <= 0 afterwards, the player is defeated.
  */
-export function handleAttack(pData) {
+export function handleAttack(pData, activeDebuff = null) {
     const logMessages = [];
     if (!pData || pData.hp <= 0 || pData.status === 'defeated') {
         logMessages.push(`${pData?.name || 'Player'} cannot attack (defeated).`);
@@ -172,8 +188,8 @@ export function handleAttack(pData) {
     pData.charge = pData.charge || 0;
 
     // recompute sum & jackpot
-    pData.sum = computeHandSum(pData.hand || []);
-    const jackpot = getJackpotForPlayer(pData);
+    pData.sum = computeHandSum(pData.hand || [], activeDebuff);
+    const jackpot = getJackpotForPlayer(pData, activeDebuff);
 
     if (pData.sum > jackpot) {
         logMessages.push(`${pData.name} had a busted hand at attack time; they lose their hand and must invest before acting.`);
@@ -189,7 +205,8 @@ export function handleAttack(pData) {
     const g = (deckConfig && typeof deckConfig.g === 'function') ? deckConfig.g : (() => 1);
 
     const base = pData.charge || 0;
-    const multiplier = g(pData.sum || 0);
+    let multiplier = g(pData.sum || 0, jackpot);
+
     const damage = Math.floor(base * multiplier);
 
     // Refund investment + profit/loss
@@ -209,14 +226,17 @@ export function handleAttack(pData) {
         logMessages.push(`${pData.name}'s attack wasn't enough to sustain them!`);
         pData.hp = 0;
         pData.status = 'defeated';
+    } else {
+        pData.status = 'needs_mana';
     }
+
 
     return { updatedPlayer: pData, damageDealt: damage, logMessages };
 }
 
 export function handleRest(pData) {
     const maxHp = pData.maxHp || 100;
-    const healAmount = Math.floor((Math.random() * 0.10 + 0.15) * maxHp);
+    const healAmount = Math.floor((Math.random() * 0.05 + 0.20) * maxHp);
     pData.hp = Math.min(maxHp, (pData.hp || 0) + healAmount);
     const logMessage = `${pData.name} rests and recovers ${healAmount} HP.`;
     return { updatedPlayer: pData, logMessage };

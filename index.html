@@ -57,7 +57,8 @@
         <div id="party-stats-container">
             <!-- Party member stats will be added here by JavaScript -->
         </div>
-        
+        <div id="itemsContainer" class="items-panel"></div>
+
         <!-- The map container is now just for the scrollable map itself -->
         <div id="map-container">
             <div id="map-nodes"></div>
@@ -100,18 +101,24 @@
 
         <!-- End of Battle Screen -->
         <div id="end-of-battle-screen" class="hidden">
-            <h2 id="battle-result-title">Victory!</h2>
-            <p id="battle-result-text">You defeated the monster!</p>
-
-            <!-- cardSelection and rewardChoices are dynamically shown by UI functions when needed -->
-            <div id="cardSelection" style="display:none;"></div>
-            <div id="rewardChoices" style="display:none;"></div>
-
+            <h2 id="battle-result-title"></h2>
+            <div id="result-text" class="result-log"></div>
             <p id="gold-reward-text"></p>
-            <button id="return-to-map-btn">Return to Map</button>
+
+            <!-- Add shop container here -->
+            <div id="shop-container" style="display:none;">
+                <h3>Shop</h3>
+                <p>You have <span id="purchase-tokens">0</span> purchase token(s).</p>
+                <div id="shop-items"></div>
+            </div>
+
+            <div id="rewardChoices" style="display:none;"></div>
+            <button id="return-to-map-btn">Continue</button>
             <button id="defeat-continue-btn">Continue</button>
         </div>
     </div>
+
+
 
     <!-- Main script entry point -->
     <script src="js/renderer.js" type="module"></script>

@@ -168,10 +168,31 @@ function heuristic(pos1, pos2) {
 
 
 // --- Original Deck Shuffling Logic (Still Needed) ---
-export function createDeck(deckConfig) {
+export function createDeck(deckConfig, removedCards = []) {
     const deck = [];
+    const removedCounts = {};
+    // Count how many of each card value to remove
+    removedCards.forEach(cardValue => {
+        const key = String(cardValue);
+        removedCounts[key] = (removedCounts[key] || 0) + 1;
+    });
+
     deckConfig.cards.forEach(cardInfo => {
-        for (let i = 0; i < cardInfo.c; i++) {
+        const cardValue = String(cardInfo.v);
+        let countToAdd = cardInfo.c;
+        
+        if (removedCounts[cardValue] > 0) {
+            const numToRemove = removedCounts[cardValue];
+            if (countToAdd >= numToRemove) {
+                countToAdd -= numToRemove;
+                removedCounts[cardValue] = 0; // All required removals for this card value are satisfied
+            } else {
+                removedCounts[cardValue] -= countToAdd;
+                countToAdd = 0;
+            }
+        }
+        
+        for (let i = 0; i < countToAdd; i++) {
             deck.push(cardInfo.v);
         }
     });

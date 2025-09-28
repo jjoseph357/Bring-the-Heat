@@ -10,10 +10,10 @@ export const firebaseConfig = {
 };
 
 export const decks = {
-    deck1: { name: "Standard Issue", jackpot: 21, g: (sum) => 0.1 + (9.0 - 0.1) * Math.pow(sum / 21, 9), cards: [{ v: 2, c: 4 }, { v: 3, c: 4 }, { v: 4, c: 4 }, { v: 5, c: 4 }, { v: 6, c: 4 }, { v: 7, c: 4 }, { v: 8, c: 4 }, { v: 9, c: 4 }, { v: 10, c: 4 }] },
-    deck2: { name: "Pyramid Scheme", jackpot: 20, g: (sum) => 0.1 + (7.0 - 0.1) * Math.pow(sum / 20, 7), cards: [{ v: 1, c: 1 }, { v: 2, c: 2 }, { v: 3, c: 3 }, { v: 4, c: 4 }, { v: 5, c: 5 }, { v: 6, c: 6 }, { v: 7, c: 7 }, { v: 8, c: 8 }] },
-    deck3: { name: "High Stakes", jackpot: 10, g: (sum) => 0.1 + (14.0 - 0.1) * Math.pow(sum / 10, 9.5), cards: [{ v: 1, c: 10 }, { v: 2, c: 10 }, { v: 3, c: 10 }, { v: 10, c: 6 }] },
-    deck4: { name: "Low Roller", jackpot: 21, g: (sum) => 0.1 + (4.5 - 0.1) * Math.pow(sum / 21, 6), cards: [{ v: 1, c: 12 }, { v: 2, c: 12 }, { v: 3, c: 12 }] }
+    deck1: { name: "Standard Issue", jackpot: 21, g: (sum, jackpot) => 0.1 + (9.0 - 0.1) * Math.pow(sum / jackpot, 9), cards: [{ v: 2, c: 4 }, { v: 3, c: 4 }, { v: 4, c: 4 }, { v: 5, c: 4 }, { v: 6, c: 4 }, { v: 7, c: 4 }, { v: 8, c: 4 }, { v: 9, c: 4 }, { v: 10, c: 4 }] },
+    deck2: { name: "Pyramid Scheme", jackpot: 20, g: (sum, jackpot) => 0.1 + (7.0 - 0.1) * Math.pow(sum / jackpot, 7), cards: [{ v: 1, c: 1 }, { v: 2, c: 2 }, { v: 3, c: 3 }, { v: 4, c: 4 }, { v: 5, c: 5 }, { v: 6, c: 6 }, { v: 7, c: 7 }, { v: 8, c: 8 }] },
+    deck3: { name: "High Stakes", jackpot: 10, g: (sum, jackpot) => 0.1 + (14.0 - 0.1) * Math.pow(sum / jackpot, 9.5), cards: [{ v: 1, c: 10 }, { v: 2, c: 10 }, { v: 3, c: 10 }, { v: 10, c: 6 }] },
+    deck4: { name: "Low Roller", jackpot: 21, g: (sum, jackpot) => 0.1 + (4.5 - 0.1) * Math.pow(sum / jackpot, 6), cards: [{ v: 1, c: 12 }, { v: 2, c: 12 }, { v: 3, c: 12 }] }
 };
 
 export const monsters = {
