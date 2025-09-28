@@ -225,7 +225,7 @@ function generateEnemyGroup(nodeType) {
         enemyKeys = Object.keys(monsters.elite);
     } else if (nodeType === 'Boss') {
         tier = 'boss';
-        enemyKeys = ['nodeGuardian'];
+        enemyKeys = Object.keys(monsters.boss); 
     }
 
     const enemyType = enemyKeys[Math.floor(Math.random() * enemyKeys.length)];
