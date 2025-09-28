@@ -83,6 +83,7 @@ export const elements = {
     mapNodes: document.getElementById('map-nodes'),
     battleContainer: document.getElementById('battle-container'),
     endOfBattleScreen: document.getElementById('end-of-battle-screen'),
+    rewardPromptText: document.getElementById('reward-prompt-text'), // Add this
 
     // Main Menu & Lobby
     singlePlayerBtn: document.getElementById('single-player-btn'),
@@ -393,13 +394,15 @@ export function showGameScreen(mode, resultData = {}, isHost = false) {
     }
     if (mode === 'end_battle') {
         const titleEl = document.getElementById('battle-result-title');
-        const textEl = document.getElementById('result-text'); // Use the new ID
+        const textEl = document.getElementById('result-text');
         const goldRewardEl = document.getElementById('gold-reward-text');
         
         textEl.innerHTML = ''; // Clear previous content
         if (elements.returnToMapBtn) elements.returnToMapBtn.style.display = 'none';
         if (elements.defeatContinueBtn) elements.defeatContinueBtn.style.display = 'none';
         if (goldRewardEl) goldRewardEl.style.display = 'none';
+        
+        if (elements.rewardPromptText) elements.rewardPromptText.style.display = 'none'; // Add this line
 
         switch (resultData.result) {
             case 'victory':
@@ -409,6 +412,11 @@ export function showGameScreen(mode, resultData = {}, isHost = false) {
                     goldRewardEl.textContent = `Each party member receives ${resultData.goldReward} Gold!`;
                     goldRewardEl.style.display = 'block';
                 }
+                if (elements.rewardPromptText && resultData.rewardMessage) {
+                    elements.rewardPromptText.textContent = resultData.rewardMessage;
+                    elements.rewardPromptText.style.display = 'block';
+                }
+
                 if (isHost && elements.returnToMapBtn) elements.returnToMapBtn.style.display = 'block';
                 break;
 

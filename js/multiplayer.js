@@ -318,7 +318,7 @@ function listenToLobbyChanges() {
                 showShopUI(myPlayerRecord);
             }
         } else if (gameState.status === 'victory' || gameState.status === 'defeat') {
-            ui.showGameScreen('end_battle', {result: gameState.status, goldReward: gameState.goldReward, extraRewards: gameState.extraRewards }, isHost);
+            ui.showGameScreen('end_battle', {result: gameState.status, goldReward: gameState.goldReward, extraRewards: gameState.extraRewards, rewardMessage: gameState.rewardMessage }, isHost);
             
             // Reset the return button text to "Continue" 
             if (ui.elements.returnToMapBtn) {
@@ -523,17 +523,22 @@ function handleVictory(battleData) {
     if (monster.tier === "normal") {
         const rewards = getRandomRewards(3);
         updates[`/gameState/extraRewards`] = rewards;
+        updates[`/gameState/rewardMessage`] = "Choose a card to add to your deck as a reward!";
     } else if (monster.tier === "elite") {
         const eliteRewards = getRandomEliteRewards(3);
         updates[`/gameState/extraRewards`] = eliteRewards;
+        updates[`/gameState/rewardMessage`] = "Choose a powerful item as your reward!";
     } else if (monster.tier === "boss") {
         const bossRewards = getRandomBossRewards(3);
         updates[`/gameState/extraRewards`] = bossRewards;
+        updates[`/gameState/rewardMessage`] = "Choose a legendary blessing as your reward!";
         updates[`/gameState/bossDefeated`] = true;
         updates['/gameState/loopCount'] = (lobbyData.gameState.loopCount || 0) + 1;
     } else {
         updates[`/gameState/extraRewards`] = null;
+        updates[`/gameState/rewardMessage`] = null; // Clear message if no rewards
     }
+
 
     const currentNodeId = lobbyData.gameState.currentNodeId;
     updates[`/gameState/clearedNodes`] = [...(lobbyData.gameState.clearedNodes || [0]), currentNodeId];
@@ -1377,6 +1382,7 @@ function returnToMap() {
         '/gameState/goldReward': null,
         '/battle': null,
         '/gameState/extraRewards': null,
+        '/gameState/rewardMessage': null, // Add this line to clear the message
     };
     update(lobbyRef, updates);
 }

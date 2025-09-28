@@ -446,6 +446,7 @@ function clearDebuffUI() {
 function endBattle(result) {
     let goldReward = 0;
     let extraRewards = [];
+    let rewardMessage = ''; // Variable to hold the message
 
     clearDebuffUI();
     if(state.battle) state.battle.activeDebuff = null;
@@ -476,11 +477,15 @@ function endBattle(result) {
 
         if (monsterType === 'normal') {
             extraRewards = getRandomRewards(3);
+            rewardMessage = "Choose a card to add to your deck as a reward!";
         } else if (monsterType === 'elite') {
             extraRewards = getRandomEliteRewards(3);
+            rewardMessage = "Choose a powerful item as your reward!";
         } else if (monsterType === 'boss') {
             extraRewards = getRandomBossRewards(3);
+            rewardMessage = "Choose a legendary blessing as your reward!";
         }
+
 
         state.battle = null;
         ui.showGameScreen('end_battle', { result, goldReward, extraRewards }, true);
@@ -502,7 +507,7 @@ function endBattle(result) {
     }
     
     state.battle = null;
-    ui.showGameScreen('end_battle', { result, goldReward }, true);
+    ui.showGameScreen('end_battle', { result, goldReward, extraRewards, rewardMessage }, true);
     ui.elements.returnToMapBtn.onclick = returnToMap;
 }
 
