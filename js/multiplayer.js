@@ -1325,7 +1325,7 @@ function startEnemyTurn() {
             if (livingPlayers.length === 0) return;
 
             const [targetPlayerId, targetPlayerData] = livingPlayers[Math.floor(Math.random() * livingPlayers.length)];
-            if (Math.random() > monsterStats.hitChance) {
+            if (Math.random() < monsterStats.hitChance) {
                 ui.triggerAttackAnimation(monster.id, false); // Trigger animation
                 const newHp = Math.max(0, targetPlayerData.hp - monsterStats.attack);
                 damageUpdates[`/players/${targetPlayerId}/hp`] = newHp;

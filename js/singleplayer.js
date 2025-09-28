@@ -393,7 +393,7 @@ function startEnemyTurn() {
         const monster = livingMonsters[currentMonsterIndex];
         const myData = state.battle.players[state.player.id];
 
-        if (Math.random() > monster.hitChance) {
+        if (Math.random() < monster.hitChance) {
             ui.triggerAttackAnimation(monster.id, false); // Trigger animation
 
             const damage = monster.attack;
