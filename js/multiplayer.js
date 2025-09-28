@@ -700,7 +700,7 @@ function revivePlayerMultiplayer(playerId) {
     const playerRef = ref(db, `lobbies/${currentLobby}/players/${playerId}`);
     runTransaction(playerRef, (pData) => {
         if (pData && pData.hp <= 0) {
-            let reviveCost = 50 + ((pData.deaths || 0) * 50);
+            let reviveCost = 10 + ((pData.deaths || 0) * 50);
             if ((pData.items || []).includes("Reduce revive cost by 20% (unique)")) {
                 reviveCost = Math.floor(reviveCost * 0.8);
             }

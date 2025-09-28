@@ -591,7 +591,7 @@ function revivePlayer(playerId) {
     if (playerId !== state.player.id) return;
 
     const myData = state.player;
-    let reviveCost = 50 + ((myData.deaths || 0) * 50);
+    let reviveCost = 10 + ((myData.deaths || 0) * 50);
     if ((myData.items || []).includes("Reduce revive cost by 20% (unique)")) {
         reviveCost = Math.floor(reviveCost * 0.8);
     }
