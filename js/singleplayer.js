@@ -397,7 +397,7 @@ function startEnemyTurn() {
             ui.triggerAttackAnimation(monster.id, false); // Trigger animation
 
             const damage = monster.attack;
-            logBattleMessage(`${monster.name} hits ${myData.name} for ${damage} damage! (${monster.hitChance}% chance)`);
+            logBattleMessage(`${monster.name} hits ${myData.name} for ${damage} damage! (${monster.hitChance*100}% chance)`);
             myData.hp = Math.max(0, myData.hp - damage);
             state.player.hp = myData.hp;
         } else {

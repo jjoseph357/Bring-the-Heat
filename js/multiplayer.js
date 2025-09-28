@@ -1331,7 +1331,7 @@ function startEnemyTurn() {
                 const newHp = Math.max(0, targetPlayerData.hp - monsterStats.attack);
                 damageUpdates[`/players/${targetPlayerId}/hp`] = newHp;
                 lobbyPlayerUpdates[`/players/${targetPlayerId}/hp`] = newHp;
-                logBattleMessage(`${monster.name} hits ${targetPlayerData.name} for ${monsterStats.attack} damage! (${monster.hitChance}% chance)`);
+                logBattleMessage(`${monster.name} hits ${targetPlayerData.name} for ${monsterStats.attack} damage! (${monster.hitChance*100}% chance)`);
                 if (newHp <= 0) {
                     logBattleMessage(`${targetPlayerData.name} has been defeated!`);
                     damageUpdates[`/players/${targetPlayerId}/status`] = 'defeated';
