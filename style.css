@@ -300,7 +300,7 @@ hr { border-color: #444; }
     transition: transform 0.2s ease-out;
 }
 #enemy-side .sprite {
-    transform: scaleX(-1); /* Flip enemies to face players */
+    transform: scaleX(1); /* Flip enemies to face players */
 }
 
 .sprite.attacking {
