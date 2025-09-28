@@ -409,6 +409,7 @@ function createBattleState(nodeType, currentLobbyData) {
         phaseEndTime: Date.now() + 25000,
         background: backgrounds[Math.floor(Math.random() * backgrounds.length)], // Add random background
         monsters: [{
+            ...baseMonster, // Copies all base properties including name, attack, and ASSET
             tier: monsterTier,
             type: monsterKey,
             name: baseMonster.name,
