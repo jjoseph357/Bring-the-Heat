@@ -372,7 +372,10 @@ function performTally(votes) {
 function createBattleState(nodeType, currentLobbyData) {
     let monsterTier, monsterKey;
     if (nodeType === 'Boss') {
-        monsterTier = 'boss'; monsterKey = 'nodeGuardian';
+        monsterTier = 'boss';
+        // FIX: Dynamically get the boss key instead of hardcoding a removed one
+        const bossKeys = Object.keys(monsters.boss || {});
+        monsterKey = bossKeys[Math.floor(Math.random() * bossKeys.length)];
     } else if (nodeType === 'Elite Battle') {
         monsterTier = 'elite';
         const eliteKeys = Object.keys(monsters.elite || {});
@@ -383,6 +386,7 @@ function createBattleState(nodeType, currentLobbyData) {
         monsterKey = normalKeys[Math.floor(Math.random() * normalKeys.length)];
     }
     const baseMonster = { ...monsters[monsterTier][monsterKey] };
+
 
     // Apply difficulty scaling based on loopCount
     const loopCount = currentLobbyData.gameState.loopCount || 0;

@@ -423,6 +423,16 @@ function startEnemyTurn() {
 function startNextPlayerTurn() {
     const myData = state.battle.players[state.player.id];
 
+    // FIX: Add a check for 0 mana when the player must invest again.
+    if (myData.mana <= 0 && myData.charge === 0) {
+        myData.hp = 0;
+        myData.status = 'defeated';
+        logBattleMessage(`${myData.name} has no mana left and is defeated!`);
+        ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
+        setTimeout(() => endBattle('defeat'), 1500);
+        return; // Stop the turn here
+    }
+
     if (myData.charge === 0) {
         myData.status = 'needs_mana';
     } else {
@@ -433,6 +443,7 @@ function startNextPlayerTurn() {
     state.battle.turn++;
     ui.updateBattleUI(state.battle, state.player.id, state.player.deckId);
 }
+
 
 function clearDebuffUI() {
     // This function is now more robust.

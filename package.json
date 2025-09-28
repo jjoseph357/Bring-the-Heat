@@ -7,7 +7,7 @@
     "start": "electron .",
     "build": "electron-builder"
   },
-  "author": "",
+  "author": "Joseph Elliott",
   "license": "ISC",
   "dependencies": {
     "firebase": "^12.3.0"
@@ -19,11 +19,10 @@
   "build": {
     "appId": "com.infernosgambit.game",
     "productName": "Inferno's Gambit",
-    "files": [
-      "main.js",
-      "index.html",
-      "style.css",
-      "js/**/*"
+     "files": [
+      "**/*",
+      "!node_modules/*",
+      "node_modules/delaunator/delaunator.min.js"
     ],
     "win": {
       "target": "nsis",
@@ -36,6 +35,9 @@
     "linux": {
       "target": "AppImage",
       "icon": "build/icon.png"
+    },
+    "directories": {
+      "output": "dist"
     }
   }
 }
