@@ -1,5 +1,5 @@
 // singleplayer.js (updated)
-import { decks, monsters } from './config.js';
+import { decks, monsters, playerCharacters, backgrounds } from './config.js'; // Add playerCharacters and backgrounds
 import * as ui from './ui.js';
 import { generateNewMap, createDeck, shuffleDeck } from './game-logic.js';
 import * as engine from './battle-engine.js';
@@ -79,6 +79,7 @@ export function start(playerName, deckId) {
     state = {
         player: { 
             id: 'p1', name: playerName, deckId, hp: 100, maxHp: 100,
+            asset: playerCharacters[Math.floor(Math.random() * playerCharacters.length)], // Assign random asset
             gold: 0, deaths: 0, extraCards: [], items: [],
             removedCards: [], // Track cards removed from the base deck
             permanentDamage: 0, // Track permanent damage bonus
@@ -161,12 +162,14 @@ function initializeBattle(nodeType) {
     state.battle = {
         phase: 'PLAYER_TURN',
         monsters: generateEnemyGroup(nodeType),
+        background: backgrounds[Math.floor(Math.random() * backgrounds.length)], // Add random background
         log: {},
         players: {
             [state.player.id]: {
                 name: state.player.name,
                 hp: state.player.hp,
                 maxHp: state.player.maxHp,
+                asset: state.player.asset, // Pass player asset
                 mana: startingMana,
                 deck: fullShuffledDeck,
                 deckId: state.player.deckId,
@@ -235,7 +238,7 @@ function generateEnemyGroup(nodeType) {
         baseStats.attack = Math.floor(baseStats.attack * Math.pow(1.25, loopCount));
     }
 
-    group.push({ ...baseStats, id: `m_${now}`, tier: tier, type: enemyType });
+    group.push({ ...baseStats, maxHp: baseStats.hp, id: `m_${now}`, tier: tier, type: enemyType });
     return group;
 }
 
@@ -340,6 +343,7 @@ function performAttack() {
     
     let totalDamage = result.damageDealt;
     
+
     // Add permanent damage bonus
     totalDamage += myData.permanentDamage || 0;
     
@@ -351,7 +355,9 @@ function performAttack() {
             logBattleMessage(`${myData.name}'s wealth adds ${goldBonus} bonus damage!`);
         }
     }
-    
+    if (totalDamage > 0) {
+        ui.triggerAttackAnimation(state.player.id, true); // Trigger animation
+    }
     target.hp = Math.max(0, target.hp - totalDamage);
     (result.logMessages || []).forEach(logBattleMessage);
 
@@ -387,12 +393,16 @@ function startEnemyTurn() {
         const monster = livingMonsters[currentMonsterIndex];
         const myData = state.battle.players[state.player.id];
 
-        if (Math.random() < monster.hitChance) {
+        if (Math.random() > monster.hitChance) {
+            ui.triggerAttackAnimation(monster.id, false); // Trigger animation
+
             const damage = monster.attack;
-            logBattleMessage(`${monster.name} hits ${myData.name} for ${damage} damage!`);
+            logBattleMessage(`${monster.name} hits ${myData.name} for ${damage} damage! (${monster.hitChance}% chance)`);
             myData.hp = Math.max(0, myData.hp - damage);
             state.player.hp = myData.hp;
         } else {
+            ui.triggerAttackAnimation(monster.id, false); // Trigger animation
+
             logBattleMessage(`${monster.name} attacks ${myData.name} but MISSES!`);
         }
 
@@ -667,7 +677,7 @@ function handleShopNode() {
                 ui.showCardSelection(choices, (picked) => {
                     // Use internal id mapping: if picked is 'draw2' keep it as-is
                     state.player.extraCards.push(picked);
-                    alert(`Added ${picked} to your deck!`);
+                    alert(`Added ${picked} card to your deck!`);
                     handleShopNode(); // refresh
                 });
                 return; // don't re-render right away, the callback will

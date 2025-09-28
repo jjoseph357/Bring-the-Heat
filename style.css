@@ -202,3 +202,250 @@ hr { border-color: #444; }
     background-color: #555;
     color: #999;
 }
+.result-log {
+    min-height: 100px;
+    max-height: 200px;
+    overflow-y: auto;
+    text-align: left;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #2c2f33;
+    border-radius: 4px;
+    border: 1px solid #40444b;
+}
+
+/* --- NEW BATTLE STYLING --- */
+#battle-container {
+    display: flex;
+    flex-direction: column;
+    position: relative; /* For positioning children */
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+#party-info-header {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    gap: 20px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 10px;
+    border-radius: 8px;
+    z-index: 10;
+}
+
+.party-info-player {
+    color: white;
+}
+.party-info-player h4 {
+    margin: 0 0 5px 0;
+    color: #fdd835;
+}
+.party-info-player p { margin: 2px 0; }
+.party-info-player ul { list-style: none; padding-left: 10px; margin-top: 5px; }
+
+
+#active-debuff-display {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(153, 45, 34, 0.8);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    font-weight: bold;
+    z-index: 10;
+    max-width: 250px;
+}
+
+#battle-scene {
+    flex-grow: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 5%;
+}
+
+#player-side, #enemy-side {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+    width: 40%;
+    height: 100%;
+}
+
+.character-container, .enemy-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    color: white;
+    text-shadow: 2px 2px 4px black;
+}
+
+.sprite {
+    max-width: 150px;
+    max-height: 150px;
+    object-fit: contain;
+    filter: drop-shadow(3px 5px 2px #000);
+    transition: transform 0.2s ease-out;
+}
+#enemy-side .sprite {
+    transform: scaleX(-1); /* Flip enemies to face players */
+}
+
+.sprite.attacking {
+    /* Animation applied via JS */
+}
+
+.health-bar-container {
+    width: 120px;
+    height: 20px;
+    background-color: #333;
+    border: 2px solid #111;
+    border-radius: 5px;
+    margin-top: 5px;
+    position: relative;
+}
+
+.health-bar-fill {
+    height: 100%;
+    background-color: #c73424;
+    border-radius: 3px;
+    transition: width 0.3s ease-in-out;
+}
+
+.health-value {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 14px;
+    font-weight: bold;
+    color: white;
+}
+
+#turn-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -150%);
+    font-size: 4em;
+    font-weight: bold;
+    color: #fdd835;
+    text-shadow: 3px 3px 5px #000;
+    z-index: 20;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+#turn-indicator.visible {
+    opacity: 1;
+}
+
+
+#battle-hud {
+    flex-shrink: 0;
+    height: 220px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 10px;
+    gap: 20px;
+}
+
+#game-log-container {
+    width: 250px;
+    height: 100%;
+    background-color: rgba(35, 39, 42, 0.8);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+}
+#game-log {
+    flex-grow: 1;
+    overflow-y: auto;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    color: #ddd;
+}
+#game-log p { margin: 0 0 5px 0; border-bottom: 1px solid #40444b; }
+
+
+.hud-center-area {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+}
+#game-controls { margin-bottom: 10px; }
+#player-hand-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    flex-grow: 1;
+    min-height: 150px;
+}
+
+.hud-right-area {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    height: 100%;
+}
+#mana-display {
+    width: 100px;
+    height: 100px;
+    background-image: url('assets/gem.png'); /* You will need to add a gem asset */
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 2em;
+    font-weight: bold;
+    color: white;
+    text-shadow: 2px 2px 4px #000;
+}
+#player-stats-display {
+    background-color: rgba(35, 39, 42, 0.8);
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-align: right;
+}
+#player-stats-display p { margin: 5px 0; font-size: 1.1em; }
+.sprite {
+    max-width: 350px; /* Changed from 150px */
+    max-height: 350px; /* Changed from 150px */
+    object-fit: contain;
+    filter: drop-shadow(3px 5px 2px #000);
+    transition: transform 0.2s ease-out;
+}
+
+.health-bar-container {
+    width: 250px; /* Changed from 120px */
+    height: 25px; /* Changed from 20px */
+    background-color: #333;
+    border: 2px solid #111;
+    border-radius: 5px;
+    margin-top: 5px;
+    position: relative;
+}

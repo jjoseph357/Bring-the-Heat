@@ -1,4 +1,4 @@
-import { decks, monsters } from './config.js';
+import { decks, monsters, playerCharacters, backgrounds } from './config.js'; // Add playerCharacters and backgrounds
 import * as ui from './ui.js';
 import { generateNewMap, createDeck, shuffleDeck } from './game-logic.js';
 import * as engine from './battle-engine.js';
@@ -125,6 +125,7 @@ function createLobby() {
     const initialPlayer = { 
         name: myName, 
         deck: myDeckId, 
+        asset: playerCharacters[Math.floor(Math.random() * playerCharacters.length)], // Assign random asset
         hp: 100, 
         maxHp: 100, 
         gold: 0, 
@@ -157,6 +158,7 @@ function joinLobby() {
             set(newPlayerRef, { 
                 name: myName, 
                 deck: myDeckId, 
+                asset: playerCharacters[Math.floor(Math.random() * playerCharacters.length)],
                 hp: 100, 
                 maxHp: 100, 
                 gold: 0, 
@@ -401,11 +403,13 @@ function createBattleState(nodeType, currentLobbyData) {
     const battleState = {
         phase: 'PLAYER_TURN', 
         phaseEndTime: Date.now() + 25000,
+        background: backgrounds[Math.floor(Math.random() * backgrounds.length)], // Add random background
         monsters: [{
             tier: monsterTier,
             type: monsterKey,
             name: baseMonster.name,
             hp: baseMonster.hp * totalPlayers,
+            maxHp: baseMonster.hp * totalPlayers,
             attack: baseMonster.attack,
             id: `m_${Date.now()}`
         }],
@@ -450,6 +454,7 @@ function createBattleState(nodeType, currentLobbyData) {
                 name: player.name,
                 hp: player.hp,
                 maxHp: player.maxHp || 100,
+                asset: player.asset,
                 mana: startingMana,
                 deck: shuffledDeck,
                 deckId: player.deck,
@@ -1281,6 +1286,7 @@ function performAttack() {
             }
             
             if (totalDamage > 0) {
+                ui.triggerAttackAnimation(currentPlayerId, true); // Trigger animation
                 const monsterHpRef = ref(db, `lobbies/${currentLobby}/battle/monsters/0/hp`);
                 runTransaction(monsterHpRef, (hp) => Math.max(0, (hp || 0) - totalDamage));
             }
@@ -1310,16 +1316,18 @@ function startEnemyTurn() {
             if (livingPlayers.length === 0) return;
 
             const [targetPlayerId, targetPlayerData] = livingPlayers[Math.floor(Math.random() * livingPlayers.length)];
-            if (Math.random() < monsterStats.hitChance) {
+            if (Math.random() > monsterStats.hitChance) {
+                ui.triggerAttackAnimation(monster.id, false); // Trigger animation
                 const newHp = Math.max(0, targetPlayerData.hp - monsterStats.attack);
                 damageUpdates[`/players/${targetPlayerId}/hp`] = newHp;
                 lobbyPlayerUpdates[`/players/${targetPlayerId}/hp`] = newHp;
-                logBattleMessage(`${monster.name} hits ${targetPlayerData.name} for ${monsterStats.attack} damage!`);
+                logBattleMessage(`${monster.name} hits ${targetPlayerData.name} for ${monsterStats.attack} damage! (${monster.hitChance}% chance)`);
                 if (newHp <= 0) {
                     logBattleMessage(`${targetPlayerData.name} has been defeated!`);
                     damageUpdates[`/players/${targetPlayerId}/status`] = 'defeated';
                 }
             } else {
+                ui.triggerAttackAnimation(monster.id, false); // Trigger animation on miss too
                 logBattleMessage(`${monster.name} attacks ${targetPlayerData.name} but MISSES!`);
             }
             if (Object.keys(lobbyPlayerUpdates).length > 0) update(lobbyRef, lobbyPlayerUpdates);

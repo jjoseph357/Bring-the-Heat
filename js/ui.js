@@ -128,9 +128,35 @@ export const elements = {
     // Reward and card selection panels (must exist in index.html)
     rewardChoices: document.getElementById('rewardChoices'),
     cardSelection: document.getElementById('cardSelection'),
+        // Battle UI Overhaul
+    partyInfoHeader: document.getElementById('party-info-header'),
+    battleScene: document.getElementById('battle-scene'),
+    playerSide: document.getElementById('player-side'),
+    enemySide: document.getElementById('enemy-side'),
+    turnIndicator: document.getElementById('turn-indicator'),
+    battleHud: document.getElementById('battle-hud'),
+    manaDisplay: document.getElementById('mana-display'),
+    playerStatsDisplay: document.getElementById('player-stats-display'),
+    activeDebuffDisplay: document.getElementById('active-debuff-display'),
+
 };
 
 let mapInteractionHandler = null;
+
+export function triggerAttackAnimation(elementId, isPlayer) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    const moveX = isPlayer ? '80%' : '-80%';
+    const rotate = isPlayer ? '10deg' : '-10deg';
+
+    el.style.transform = `translateX(${moveX}) rotate(${rotate}) ${isPlayer ? '' : 'scaleX(-1)'}`;
+    
+    setTimeout(() => {
+        el.style.transform = isPlayer ? '' : 'scaleX(-1)';
+    }, 250); // Animation duration
+}
+
 
 export function showScreen(screenElement) {
     if (!screenElement) return;
@@ -204,132 +230,123 @@ export function updatePartyStats(players, myPlayerId, reviveCallback) {
 }
 
 export function updateBattleUI(battleData, myPlayerId, myDeckId) {
-    if (!battleData || !elements.playerBattleArea) return;
+    if (!battleData || !elements.battleContainer) return;
+
     const deckConfig = myDeckId ? decks[myDeckId] : null;
+    const myData = battleData.players ? battleData.players[myPlayerId] : null;
 
-    // Display debuff prominently
-    let debuffDisplay = document.getElementById('active-debuff-display');
-    if (battleData.activeDebuff) {
-        if (!debuffDisplay) {
-            debuffDisplay = document.createElement('div');
-            debuffDisplay.id = 'active-debuff-display';
-            debuffDisplay.style.cssText = 'background: #992d22; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; text-align: center; font-weight: bold;';
-            const battleContainer = document.getElementById('battle-container');
-            if (battleContainer) {
-                battleContainer.insertBefore(debuffDisplay, battleContainer.firstChild);
-            }
-        }
-        debuffDisplay.textContent = `⚠️ DEBUFF: ${battleData.activeDebuff}`;
-    } else if (debuffDisplay) {
-        debuffDisplay.remove();
-    }
+    // 1. Set Background
+    elements.battleContainer.style.backgroundImage = `url(${battleData.background})`;
 
-    // Update jackpot display
-    let jackpotText = deckConfig?.jackpot || 'N/A';
-    if (deckConfig) {
-        if (battleData.activeDebuff === "Target sum is doubled") {
-            jackpotText = `${deckConfig.jackpot * 2} (Doubled!)`;
-        } else if (battleData.activeDebuff === "Draw double the cards each draw") {
-            jackpotText = `${Math.floor(deckConfig.jackpot * 1.5)} (+50%)`;
-        }
-    }
-    elements.playerJackpot && (elements.playerJackpot.textContent = jackpotText);
-
-
-    // Render monsters
-    const monsterArea = elements.monsterArea;
-    if (monsterArea) {
-        monsterArea.innerHTML = ''; // Clear previous monsters
-        (battleData.monsters || []).forEach(monster => {
-            const card = document.createElement('div');
-            card.className = 'monster-card';
-            if (monster.hp <= 0) {
-                card.classList.add('dead');
-            }
-            card.innerHTML = `
-                <h4>${monster.name}</h4>
-                <p>HP: ${monster.hp}</p>
-            `;
-            monsterArea.appendChild(card);
-        });
-    }
-
-    elements.phaseTitle && (elements.phaseTitle.textContent = (battleData.phase || '').replace('_', ' '));
-
-    // Player area
-    const playerArea = elements.playerBattleArea;
-    playerArea.innerHTML = '';
+    // 2. Update Header (Gold/Items)
+    const header = elements.partyInfoHeader;
+    header.innerHTML = '';
     for (const pId in (battleData.players || {})) {
         const pData = battleData.players[pId];
-        const playerCard = document.createElement('div');
-        playerCard.className = 'player-battle-info';
-        if (pId === myPlayerId) playerCard.classList.add('is-self');
-
-        if (pData.hp <= 0) {
-            playerCard.classList.add('dead');
-            pData.status = 'dead';
+        const playerInfoDiv = document.createElement('div');
+        playerInfoDiv.className = 'party-info-player';
+        
+        let itemsHTML = '';
+        if (pData.items && pData.items.length > 0) {
+            itemsHTML = `<ul>${pData.items.map(item => `<li>${item}</li>`).join('')}</ul>`;
         }
 
-        playerCard.innerHTML = `
+        playerInfoDiv.innerHTML = `
             <h4>${pData.name}</h4>
-            <p>HP: ${pData.hp} / ${pData.maxHp}</p>
-            <p>Status: ${pData.status || 'N/A'}</p>
-            <p>Charge: ${pData.charge || 0}</p>
-            <p>Sum: ${pData.sum || 0}</p>
             <p>Gold: ${pData.gold || 0}</p>
-            ${pData.permanentDamage ? `<p>Bonus Dmg: +${pData.permanentDamage}</p>` : ''}
+            ${itemsHTML}
         `;
-        playerArea.appendChild(playerCard);
+        header.appendChild(playerInfoDiv);
+    }
+    
+    // 3. Update Debuff Display
+    if (battleData.activeDebuff) {
+        elements.activeDebuffDisplay.textContent = `DEBUFF: ${battleData.activeDebuff}`;
+        elements.activeDebuffDisplay.style.display = 'block';
+    } else {
+        elements.activeDebuffDisplay.style.display = 'none';
     }
 
-    // Local player controls + info
-    const myData = battleData.players ? battleData.players[myPlayerId] : null;
+    // 4. Update Turn Indicator
+    elements.turnIndicator.textContent = (battleData.phase || '').replace('_', ' ');
+    elements.turnIndicator.classList.add('visible');
+    setTimeout(() => {
+        elements.turnIndicator.classList.remove('visible');
+    }, 1500);
+
+    // 5. Render Player and Enemy Sprites
+    const playerSide = elements.playerSide;
+    const enemySide = elements.enemySide;
+    playerSide.innerHTML = '';
+    enemySide.innerHTML = '';
+
+    (battleData.monsters || []).forEach(monster => {
+        if (monster.hp <= 0) return; // Don't render dead monsters
+        const container = document.createElement('div');
+        container.className = 'enemy-container';
+        container.innerHTML = `
+            <h4>${monster.name}</h4>
+            <img id="${monster.id}" src="${monster.asset}" class="sprite">
+            <div class="health-bar-container">
+                <div class="health-bar-fill" style="width: ${(monster.hp / monster.maxHp) * 100}%;"></div>
+                <div class="health-value">${monster.hp} / ${monster.maxHp}</div>
+            </div>
+        `;
+        enemySide.appendChild(container);
+    });
+
+    for (const pId in (battleData.players || {})) {
+        const pData = battleData.players[pId];
+         if (pData.hp <= 0) continue; // Don't render dead players
+        const container = document.createElement('div');
+        container.className = 'character-container';
+        container.innerHTML = `
+            <h4>${pData.name} (Status: ${pData.status})</h4>
+            <img id="${pId}" src="${pData.asset}" class="sprite">
+            <div class="health-bar-container">
+                <div class="health-bar-fill" style="width: ${(pData.hp / pData.maxHp) * 100}%;"></div>
+                <div class="health-value">${pData.hp} / ${pData.maxHp}</div>
+            </div>
+        `;
+        playerSide.appendChild(container);
+    }
+
+    // 6. Update HUD
     if (!myData || myData.hp <= 0) {
-        // Hide action controls for dead or missing player
-        if (elements.manaInput) elements.manaInput.style.display = 'none';
-        if (elements.chargeBtn) elements.chargeBtn.style.display = 'none';
-        if (elements.drawCardBtn) elements.drawCardBtn.style.display = 'none';
-        if (elements.attackBtn) elements.attackBtn.style.display = 'none';
-        if (elements.playerMana) elements.playerMana.textContent = "0";
-        if (elements.playerSum) elements.playerSum.textContent = "0";
-        if (elements.playerMultiplier) elements.playerMultiplier.textContent = "0.00";
-        if (elements.playerHandContainer) elements.playerHandContainer.innerHTML = '';
+        elements.battleHud.style.display = 'none'; // Hide HUD if player is dead
         return;
     }
+    elements.battleHud.style.display = 'flex';
 
-    if (elements.playerMana) elements.playerMana.textContent = Math.floor(myData.mana || 0);
-    if (elements.playerSum) elements.playerSum.textContent = (myData.sum != null ? myData.sum : 0);
+    // Mana and Stats
+    elements.manaDisplay.textContent = Math.floor(myData.mana || 0);
+    elements.playerSum.textContent = (myData.sum != null ? myData.sum : 0);
     
-    // Correctly calculate multiplier for display
     let displayJackpot = deckConfig ? deckConfig.jackpot : 21;
-    if (battleData.activeDebuff === "Target sum is doubled") {
-        displayJackpot *= 2;
-    } else if (battleData.activeDebuff === "Draw double the cards each draw") {
-        displayJackpot = Math.floor(displayJackpot * 1.5);
-    }
+    if (battleData.activeDebuff === "Target sum is doubled") displayJackpot *= 2;
+    if (battleData.activeDebuff === "Draw double the cards each draw") displayJackpot = Math.floor(displayJackpot * 1.5);
+    elements.playerJackpot.textContent = displayJackpot;
+    
     const multiplier = (myData.sum > 0 && deckConfig) ? deckConfig.g(myData.sum, displayJackpot).toFixed(2) : '0.00';
-    if (elements.playerMultiplier) elements.playerMultiplier.textContent = multiplier;
+    elements.playerMultiplier.textContent = multiplier;
 
-
-    // Render hand
+    // Hand
     const handContainer = elements.playerHandContainer;
-    if (handContainer) {
-        handContainer.innerHTML = '';
-        (myData.hand || []).forEach(cardValue => displayCard(cardValue, handContainer));
-    }
+    handContainer.innerHTML = '';
+    (myData.hand || []).forEach(cardValue => displayCard(cardValue, handContainer));
 
-    // Action visibility
+    // Action Buttons
     const canBet = battleData.phase === 'PLAYER_TURN' && myData.status === 'needs_mana';
     const canAct = battleData.phase === 'PLAYER_TURN' && myData.status === 'acting';
+    elements.manaInput.style.display = canBet ? 'inline-block' : 'none';
+    elements.chargeBtn.style.display = canBet ? 'inline-block' : 'none';
+    elements.drawCardBtn.style.display = canAct ? 'inline-block' : 'none';
+    elements.attackBtn.style.display = canAct ? 'inline-block' : 'none';
 
-    if (elements.manaInput) elements.manaInput.style.display = canBet ? 'inline-block' : 'none';
-    if (elements.chargeBtn) elements.chargeBtn.style.display = canBet ? 'inline-block' : 'none';
-    if (elements.drawCardBtn) elements.drawCardBtn.style.display = canAct ? 'inline-block' : 'none';
-    if (elements.attackBtn) elements.attackBtn.style.display = canAct ? 'inline-block' : 'none';
-    if (elements.drawCardBtn) elements.drawCardBtn.disabled = !canAct;
-    if (elements.attackBtn) elements.attackBtn.disabled = !canAct;
+    elements.drawCardBtn.disabled = !canAct;
+    elements.attackBtn.disabled = !canAct;
 
-    // Game log (last few messages)
+    // Game Log
     if (elements.gameLog) {
         elements.gameLog.innerHTML = '';
         if (battleData.log) {
