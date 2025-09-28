@@ -106,11 +106,24 @@ export function init(firebaseConfig, playerName, deckId) {
     ui.elements.defeatContinueBtn.onclick = () => {
         if (isHost) {
             const updates = {
-                '/battle': null, '/map': null, '/votes': null,
+                '/battle': null,
+                '/map': null,
+                '/votes': null,
                 '/gameState/status': 'lobby',
+                '/gameState/loopCount': 0, // Reset difficulty scaling
+                '/log': null
             };
+
             Object.keys(lobbyData.players).forEach(pId => {
                 updates[`/players/${pId}/hp`] = 100;
+                updates[`/players/${pId}/maxHp`] = 100;
+                updates[`/players/${pId}/gold`] = 0;
+                updates[`/players/${pId}/deaths`] = 0;
+                updates[`/players/${pId}/extraCards`] = null;
+                updates[`/players/${pId}/removedCards`] = null;
+                updates[`/players/${pId}/items`] = null;
+                updates[`/players/${pId}/permanentDamage`] = 0;
+                updates[`/players/${pId}/consumables`] = null;
             });
             update(lobbyRef, updates);
         }
