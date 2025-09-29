@@ -323,7 +323,11 @@ export function updateBattleUI(battleData, myPlayerId, myDeckId) {
     elements.manaDisplay.textContent = Math.floor(myData.mana || 0);
     elements.playerSum.textContent = (myData.sum != null ? myData.sum : 0);
 <<<<<<< HEAD
+<<<<<<< HEAD
     elements.playerCharge.textContent = myData.charge || 0;
+=======
+    
+>>>>>>> parent of 32d4ba7 (ui)
 =======
     
 >>>>>>> parent of 32d4ba7 (ui)
