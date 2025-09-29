@@ -322,7 +322,11 @@ export function updateBattleUI(battleData, myPlayerId, myDeckId) {
     // Mana and Stats
     elements.manaDisplay.textContent = Math.floor(myData.mana || 0);
     elements.playerSum.textContent = (myData.sum != null ? myData.sum : 0);
+<<<<<<< HEAD
     elements.playerCharge.textContent = myData.charge || 0;
+=======
+    
+>>>>>>> parent of 32d4ba7 (ui)
     let displayJackpot = deckConfig ? deckConfig.jackpot : 21;
     if (battleData.activeDebuff === "Target sum is doubled") displayJackpot *= 2;
     if (battleData.activeDebuff === "Draw double the cards each draw") displayJackpot = Math.floor(displayJackpot * 1.5);
