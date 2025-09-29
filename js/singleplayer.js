@@ -446,10 +446,10 @@ function startNextPlayerTurn() {
 
 
 function clearDebuffUI() {
+    // This function is now more robust.
     const debuffEl = document.getElementById("active-debuff-display");
     if (debuffEl) {
-        // FIX: Changed from .remove() which deleted the element, to hiding it.
-        debuffEl.style.display = 'none';
+        debuffEl.remove();
     }
 }
 
@@ -499,8 +499,7 @@ function endBattle(result) {
 
 
         state.battle = null;
-        // FIX: Added the 'rewardMessage' to the data object being passed to the UI.
-        ui.showGameScreen('end_battle', { result, goldReward, extraRewards, rewardMessage }, true);
+        ui.showGameScreen('end_battle', { result, goldReward, extraRewards }, true);
 
         if (extraRewards.length > 0) {
             ui.showRewardChoices(extraRewards, (sel) => {

@@ -373,22 +373,13 @@ function createBattleState(nodeType, currentLobbyData) {
     let monsterTier, monsterKey;
     if (nodeType === 'Boss') {
         monsterTier = 'boss';
-        // FIX: This now dynamically gets a valid boss key instead of using a hardcoded one.
+        // FIX: Dynamically get the boss key instead of hardcoding a removed one
         const bossKeys = Object.keys(monsters.boss || {});
-        if (bossKeys.length === 0) {
-            console.error("No bosses found in config.js!");
-            // Fallback to a strong elite to prevent a crash
-            monsterTier = 'elite';
-            const eliteKeys = Object.keys(monsters.elite || {});
-            monsterKey = eliteKeys[Math.floor(Math.random() * eliteKeys.length)];
-        } else {
-            monsterKey = bossKeys[Math.floor(Math.random() * bossKeys.length)];
-        }
+        monsterKey = bossKeys[Math.floor(Math.random() * bossKeys.length)];
     } else if (nodeType === 'Elite Battle') {
         monsterTier = 'elite';
         const eliteKeys = Object.keys(monsters.elite || {});
         monsterKey = eliteKeys[Math.floor(Math.random() * eliteKeys.length)];
-
     } else {
         monsterTier = 'normal';
         const normalKeys = Object.keys(monsters.normal || {});
